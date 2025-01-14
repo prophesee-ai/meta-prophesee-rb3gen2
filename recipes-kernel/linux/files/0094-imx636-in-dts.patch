@@ -1,0 +1,204 @@
+From a7784ffbb7e1156cd68f4755442717da417fc9f0 Mon Sep 17 00:00:00 2001
+From: Christian Dreher <cdreher@prophesee.ai>
+Date: Fri, 6 Dec 2024 15:39:35 +0100
+Subject: [PATCH 94/94] imx636-in-dts
+
+---
+ arch/arm64/boot/dts/qcom/qcs6490-rb3gen2.dts | 154 ++++++++++++++-----
+ 1 file changed, 119 insertions(+), 35 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs6490-rb3gen2.dts b/arch/arm64/boot/dts/qcom/qcs6490-rb3gen2.dts
+index 05954259a39f..067a611a8115 100644
+--- a/arch/arm64/boot/dts/qcom/qcs6490-rb3gen2.dts
++++ b/arch/arm64/boot/dts/qcom/qcs6490-rb3gen2.dts
+@@ -196,6 +196,56 @@ active-config0 {
+ 			};
+ 		};
+ 	};
++
++	ccam5_3v3: ccam5-3v3 {
++		compatible = "regulator-fixed";
++		regulator-name = "3v3";
++		regulator-min-microvolt = <3300000>;
++		regulator-max-microvolt = <3300000>;
++		gpio = <&tlmm 136 GPIO_ACTIVE_HIGH>;
++		startup-delay-us = <500000>;
++		enable-active-high;
++	};
++
++	ccam5_3v0: ccam5-3v0 {
++		compatible = "regulator-fixed";
++		regulator-name = "vadd";
++		regulator-min-microvolt = <3000000>;
++		regulator-max-microvolt = <3000000>;
++		vin-supply = <&ccam5_3v3>;
++	};
++
++	ccam5_2v5: ccam5-2v5 {
++		compatible = "regulator-fixed";
++		regulator-name = "2v5";
++		regulator-min-microvolt = <2500000>;
++		regulator-max-microvolt = <2500000>;
++		vin-supply = <&ccam5_3v3>;
++	};
++
++	ccam5_1v8: ccam5-1v8 {
++		compatible = "regulator-fixed";
++		regulator-name = "vddd1";
++		regulator-min-microvolt = <1800000>;
++		regulator-max-microvolt = <1800000>;
++		vin-supply = <&ccam5_3v3>;
++	};
++
++	ccam5_1v1: ccam5-1v1 {
++		compatible = "regulator-fixed";
++		regulator-name = "vddd2";
++		regulator-min-microvolt = <1100000>;
++		regulator-max-microvolt = <1100000>;
++		vin-supply = <&ccam5_3v3>;
++	};
++
++	imx636_clk: ccam5_clk_U9 {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <20000000>;
++		clock-accuracy = <25>;
++	};
++
+ };
+ 
+ &apps_rsc {
+@@ -456,20 +506,28 @@ &camcc {
+ };
+ 
+ &camss {
+-	status = "disabled";
++	status = "okay";
+ 	ports {
+ 		#address-cells = <1>;
+ 		#size-cells = <0>;
+ 
+ 		/* The port index denotes CSIPHY id i.e. csiphy2 */
+-		port@3 {
+-			reg = <3>;
+-			csiphy3_ep: endpoint {
++		port@0 {
++			reg = <0>;
++			csiphy0_ep: endpoint {
+ 				clock-lanes = <7>;
+-				data-lanes = <0 1 2 3>;
+-				remote-endpoint = <&imx412_ep>;
++				data-lanes = <0 1>;
++				remote-endpoint = <&imx636>;
+ 			};
+ 		};
++//		port@3 {
++//			reg = <3>;
++//			csiphy3_ep: endpoint {
++//				clock-lanes = <7>;
++//				data-lanes = <0 1 2 3>;
++//				remote-endpoint = <&imx412_ep>;
++//			};
++//		};
+ 	};
+ };
+ 
+@@ -481,40 +539,66 @@ &cci1 {
+ 	status = "okay";
+ };
+ 
+-&cci1_i2c1 {
+-	camera@1a {
+-		/*
+-		 * rb3gen2 ships with an imx577. qcom treats imx412
+-		 * and imx577 the same way. Absent better data do the same here.
+-		 */
+-		compatible = "sony,imx412";
+-		reg = <0x1a>;
+-
+-		reset-gpios = <&tlmm 78 GPIO_ACTIVE_LOW>;
+-		pinctrl-names = "default", "suspend";
+-		pinctrl-0 = <&cam2_default>;
+-		pinctrl-1 = <&cam2_suspend>;
+-
+-		clocks = <&camcc CAM_CC_MCLK3_CLK>,
+-				 <&camcc CAM_CC_MCLK2_CLK>;
+-		assigned-clocks = <&camcc CAM_CC_MCLK3_CLK>,
+-				 <&camcc CAM_CC_MCLK2_CLK>;
+-		assigned-clock-rates = <24000000>,
+-							   <24000000>;
+-
+-		dovdd-supply  = <&vreg_l18b_1p8>;
+-		/* avdd-supply = <&vdc_5v>;
+-		 * dvdd-supply = <&vdc_5v>;
+-		 */
++//
++//&cci1_i2c1 {
++//	camera@1a {
++//		/*
++//		 * rb3gen2 ships with an imx577. qcom treats imx412
++//		 * and imx577 the same way. Absent better data do the same here.
++//		 */
++//		compatible = "sony,imx412";
++//		reg = <0x1a>;
++//
++//		reset-gpios = <&tlmm 78 GPIO_ACTIVE_LOW>;
++//		pinctrl-names = "default", "suspend";
++//		pinctrl-0 = <&cam2_default>;
++//		pinctrl-1 = <&cam2_suspend>;
++//
++//		clocks = <&camcc CAM_CC_MCLK3_CLK>,
++//				 <&camcc CAM_CC_MCLK2_CLK>;
++//		assigned-clocks = <&camcc CAM_CC_MCLK3_CLK>,
++//				 <&camcc CAM_CC_MCLK2_CLK>;
++//		assigned-clock-rates = <24000000>,
++//							   <24000000>;
++//
++//		dovdd-supply  = <&vreg_l18b_1p8>;
++//		/* avdd-supply = <&vdc_5v>;
++//		 * dvdd-supply = <&vdc_5v>;
++//		 */
++//
++//		port {
++//			imx412_ep: endpoint {
++//				clock-lanes = <7>;
++//				link-frequencies = /bits/ 64 <600000000>;
++//				data-lanes = <0 1 2 3>;
++//				remote-endpoint = <&csiphy3_ep>;
++//			};
++//		};
++//	};
++//};
++//
++
++&cci0_i2c0 {
++	sensor@3c {
++		compatible = "sony,imx636";
++		reg = <0x3c>;
++
++		clocks = <&imx636_clk>;
++
++		vadd-supply = <&ccam5_3v0>;
++		vddd1-supply = <&ccam5_1v8>;
++		vddd2-supply = <&ccam5_1v1>;
++
++		nreset-gpio = <&tlmm 21 GPIO_ACTIVE_HIGH>;
+ 
+ 		port {
+-			imx412_ep: endpoint {
+-				clock-lanes = <7>;
++			imx636: endpoint {
++				remote-endpoint = <&csiphy0_ep>;
++				data-lanes = <1 2>;
+ 				link-frequencies = /bits/ 64 <600000000>;
+-				data-lanes = <0 1 2 3>;
+-				remote-endpoint = <&csiphy3_ep>;
+ 			};
+ 		};
++
+ 	};
+ };
+ 
+-- 
+2.25.1
+

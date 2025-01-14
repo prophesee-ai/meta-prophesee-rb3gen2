@@ -1,0 +1,26 @@
+From 19d9c0b0dacd5d6535e8742eecd2aa02e5c1bac4 Mon Sep 17 00:00:00 2001
+From: Christian Dreher <cdreher@prophesee.ai>
+Date: Tue, 14 Jan 2025 19:08:50 +0100
+Subject: [PATCH] Fix types in coresight hwtracing logs
+
+Signed-off-by: Christian Dreher <cdreher@prophesee.ai>
+---
+ drivers/hwtracing/coresight/coresight-byte-cntr.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/hwtracing/coresight/coresight-byte-cntr.c b/drivers/hwtracing/coresight/coresight-byte-cntr.c
+index 8299fa8fe2b2..933cfad918bb 100644
+--- a/drivers/hwtracing/coresight/coresight-byte-cntr.c
++++ b/drivers/hwtracing/coresight/coresight-byte-cntr.c
+@@ -229,7 +229,7 @@ static int tmc_etr_byte_cntr_release(struct inode *in, struct file *fp)
+ 
+ 	dev_dbg(dev, "send data total size: %lld bytes, irq_cnt: %lld, offset: %lld rwp_offset: %lld\n",
+ 		byte_cntr_data->total_size, byte_cntr_data->total_irq,
+-		byte_cntr_data->offset,	byte_cntr_data->rwp_offset);
++		(s64)byte_cntr_data->offset, (s64)byte_cntr_data->rwp_offset);
+ 	mutex_unlock(&byte_cntr_data->byte_cntr_lock);
+ 
+ 	return 0;
+-- 
+2.25.1
+

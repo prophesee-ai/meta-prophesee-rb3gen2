@@ -1,0 +1,32 @@
+From 89427f11c31881d58c9d1cb1743e7e6544ad637e Mon Sep 17 00:00:00 2001
+From: Jigarkumar Zala <quic_jzala@quicinc.com>
+Date: Fri, 4 Oct 2024 12:37:10 -0700
+Subject: [PATCH] media: qcom: camss: Disable frame measurement
+
+In order to support varialble frame lenght CSID should not be doing
+frame measurement. This change disable the frame measument option
+from CSI Decoder end.
+
+Signed-off-by: Jigarkumar Zala <quic_jzala@quicinc.com>
+---
+ drivers/media/platform/qcom/camss/camss-csid-gen2.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-csid-gen2.c b/drivers/media/platform/qcom/camss/camss-csid-gen2.c
+index e1c757933e27..a913123c61f2 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c
+@@ -282,7 +282,9 @@ static void __csid_configure_rdi_stream(struct csid_device *csid, u8 enable, u8
+ 	u8 dt_id = vc & 0x03;
+ 
+ 	val = 1 << RDI_CFG0_BYTE_CNTR_EN;
+-	val |= 1 << RDI_CFG0_FORMAT_MEASURE_EN;
++
++	/* note: to support variable frame data, Disabling this feature from CSID */
++	val |= 0 << RDI_CFG0_FORMAT_MEASURE_EN;
+ 	val |= 1 << RDI_CFG0_TIMESTAMP_EN;
+ 	/* note: for non-RDI path, this should be format->decode_format */
+ 	val |= DECODE_FORMAT_PAYLOAD_ONLY << RDI_CFG0_DECODE_FORMAT;
+-- 
+2.34.1
+

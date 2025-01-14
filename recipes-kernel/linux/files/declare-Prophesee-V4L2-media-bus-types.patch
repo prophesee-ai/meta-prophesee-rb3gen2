@@ -1,0 +1,76 @@
+From 7dd7038ce1283bc9597749ccd9e696ed7130cb80 Mon Sep 17 00:00:00 2001
+From: Christian Dreher <cdreher@prophesee.ai>
+Date: Fri, 6 Dec 2024 16:22:24 +0100
+Subject: [PATCH] media: declare V4L2/media bus types for Prophesee sensors
+
+Evt2.0 may not be needed long-term, and media bus codes were chosen to
+minimize collision risks with mainline kernel, but should probably be
+updated if their declaration reach mainline.
+
+Put it in compressed format since the number of events per buffer varies
+with the scene activity. It looks like frames with variable amount of
+data per frame.
+
+Evt2.1 legacy: ME stands for middle endian. It's evt2.1 definition with
+a wrong ordering on 32bit words. This happens with IMX636 on
+little-endian hosts (since the MIPI CSI link manages it as 8bit data).
+
+Signed-off-by: Christian Dreher <cdreher@prophesee.ai>
+---
+ drivers/media/v4l2-core/v4l2-ioctl.c  | 4 ++++
+ include/uapi/linux/media-bus-format.h | 6 ++++++
+ include/uapi/linux/videodev2.h        | 6 ++++++
+ 3 files changed, 16 insertions(+)
+
+diff --git a/drivers/media/v4l2-core/v4l2-ioctl.c b/drivers/media/v4l2-core/v4l2-ioctl.c
+index f4d9d6279094..80663dca9545 100644
+--- a/drivers/media/v4l2-core/v4l2-ioctl.c
++++ b/drivers/media/v4l2-core/v4l2-ioctl.c
+@@ -1510,6 +1510,10 @@ static void v4l_fill_fmtdesc(struct v4l2_fmtdesc *fmt)
+ 		case V4L2_PIX_FMT_AV1_FRAME:	descr = "AV1 Frame"; break;
+ 		case V4L2_PIX_FMT_MT2110T:	descr = "Mediatek 10bit Tile Mode"; break;
+ 		case V4L2_PIX_FMT_MT2110R:	descr = "Mediatek 10bit Raster Mode"; break;
++		case V4L2_PIX_FMT_PSEE_EVT2:	descr = "32-bit Prophesee Evt2.0 Format"; break;
++		case V4L2_PIX_FMT_PSEE_EVT21ME:	descr = "64-bit Prophesee Evt2.1 Legacy"; break;
++		case V4L2_PIX_FMT_PSEE_EVT21:	descr = "64-bit Prophesee Evt2.1 Format"; break;
++		case V4L2_PIX_FMT_PSEE_EVT3:	descr = "16-bit Prophesee Evt3.0 Format"; break;
+ 		default:
+ 			if (fmt->description[0])
+ 				return;
+diff --git a/include/uapi/linux/media-bus-format.h b/include/uapi/linux/media-bus-format.h
+index a03c543cb072..e1c80a3c2b13 100644
+--- a/include/uapi/linux/media-bus-format.h
++++ b/include/uapi/linux/media-bus-format.h
+@@ -162,6 +162,12 @@
+ /* S5C73M3 sensor specific interleaved UYVY and JPEG */
+ #define MEDIA_BUS_FMT_S5C_UYVY_JPEG_1X8		0x5001
+ 
++/* Prophesee Event-based formats - next is	0x5304 */
++#define MEDIA_BUS_FMT_PSEE_EVT2			0x5300
++#define MEDIA_BUS_FMT_PSEE_EVT21ME		0x5301
++#define MEDIA_BUS_FMT_PSEE_EVT21		0x5303
++#define MEDIA_BUS_FMT_PSEE_EVT3			0x5302
++
+ /* HSV - next is	0x6002 */
+ #define MEDIA_BUS_FMT_AHSV8888_1X32		0x6001
+ 
+diff --git a/include/uapi/linux/videodev2.h b/include/uapi/linux/videodev2.h
+index 78260e5d9985..f57a07b10229 100644
+--- a/include/uapi/linux/videodev2.h
++++ b/include/uapi/linux/videodev2.h
+@@ -838,6 +838,12 @@ struct v4l2_pix_format {
+ #define V4L2_META_FMT_RK_ISP1_PARAMS	v4l2_fourcc('R', 'K', '1', 'P') /* Rockchip ISP1 3A Parameters */
+ #define V4L2_META_FMT_RK_ISP1_STAT_3A	v4l2_fourcc('R', 'K', '1', 'S') /* Rockchip ISP1 3A Statistics */
+ 
++/* Vendor specific - Prophesee event types */
++#define V4L2_PIX_FMT_PSEE_EVT2	v4l2_fourcc('P', 'S', 'E', 'E') /* Prophesee Evt 2.0 data format */
++#define V4L2_PIX_FMT_PSEE_EVT21ME	v4l2_fourcc('P', 'S', 'E', '1') /* Prophesee Evt 2.1 Legacy data format */
++#define V4L2_PIX_FMT_PSEE_EVT21	v4l2_fourcc('P', 'S', 'E', '2') /* Prophesee Evt 2.1 data format */
++#define V4L2_PIX_FMT_PSEE_EVT3	v4l2_fourcc('P', 'S', 'E', '3') /* Prophesee Evt 3.0 data format */
++
+ /* priv field value to indicates that subsequent fields are valid. */
+ #define V4L2_PIX_FMT_PRIV_MAGIC		0xfeedcafe
+ 
+-- 
+2.25.1
+
