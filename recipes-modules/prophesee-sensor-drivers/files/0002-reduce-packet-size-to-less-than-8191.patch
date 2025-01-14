@@ -1,0 +1,45 @@
+From 1c04a3a5e4d54d36622572f2e1e341790a669aaa Mon Sep 17 00:00:00 2001
+From: Christian Dreher <cdreher@prophesee.ai>
+Date: Fri, 17 Jan 2025 19:48:43 +0100
+Subject: [PATCH 2/2] reduce packet size to less than 8191
+
+---
+ imx636.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/imx636.c b/imx636.c
+index 200e230..6e35710 100644
+--- a/imx636.c
++++ b/imx636.c
+@@ -24,9 +24,8 @@
+ #define PIXEL_ARRAY_WIDTH 1280
+ #define PIXEL_ARRAY_HEIGHT 720
+ 
+-/* ROM settings */
+-#define CSI2_PACKET_SIZE 8192
+-#define CSI2_PACKETS_PER_FRAME 196
++#define CSI2_PACKET_SIZE 4096
++#define CSI2_PACKETS_PER_FRAME 391
+ 
+ #define IMX636_INCLK_RATE 20000000
+ 
+@@ -228,6 +227,8 @@ union ro_lowpower_ctrl {
+ #define IMX636_MIPI_ESCAPE_CTRL (MIPI_CSI_BASE + 0x004)
+ #define IMX636_MIPI_ESCAPE_CLK_EN BIT(7)
+ 
++#define IMX636_MIPI_PACKET_SIZE (MIPI_CSI_BASE + 0x020)
++
+ #define IMX636_MIPI_PL_RG_1 (MIPI_CSI_BASE + 0x064)
+ #define IMX636_MIPI_PL_RG_CKOUTEN BIT(1)
+ 
+@@ -967,6 +968,7 @@ static int imx636_reconfigure_csi2_freq(struct imx636 *imx636)
+ 
+ 	/* Only close packet when MIPI_PACKET_SIZE is reached */
+ 	RET_ON(imx636_clear_reg(imx636, IMX636_MIPI_CONTROL, IMX636_MIPI_PACKET_TIMEOUT_ENABLE));
++	RET_ON(imx636_write_reg(imx636, IMX636_MIPI_PACKET_SIZE, CSI2_PACKET_SIZE));
+ 
+ 	/* Power down CSI-2 and D-PHY */
+ 	RET_ON(imx636_write_reg(imx636, IMX636_MIPI_STREAM, 0));
+-- 
+2.39.5
+
