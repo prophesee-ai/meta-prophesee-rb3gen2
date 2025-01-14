@@ -1,0 +1,29 @@
+From 7114917c4043bc0edb77a4126fda8b0c22cfb22f Mon Sep 17 00:00:00 2001
+From: Christian Dreher <cdreher@prophesee.ai>
+Date: Tue, 21 Nov 2023 16:32:33 +0100
+Subject: [PATCH] Add-prophesee-media-formats
+
+---
+ include/linux/media-bus-format.h | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/include/linux/media-bus-format.h b/include/linux/media-bus-format.h
+index 7880342..94cb29e 100644
+--- a/include/linux/media-bus-format.h
++++ b/include/linux/media-bus-format.h
+@@ -165,6 +165,12 @@
+ /* S5C73M3 sensor specific interleaved UYVY and JPEG */
+ #define MEDIA_BUS_FMT_S5C_UYVY_JPEG_1X8		0x5001
+ 
++/* Prophesee Event-based formats - next is	0x5304 */
++#define MEDIA_BUS_FMT_PSEE_EVT2			0x5300
++#define MEDIA_BUS_FMT_PSEE_EVT21ME		0x5301
++#define MEDIA_BUS_FMT_PSEE_EVT21		0x5303
++#define MEDIA_BUS_FMT_PSEE_EVT3			0x5302
++
+ /* HSV - next is	0x6002 */
+ #define MEDIA_BUS_FMT_AHSV8888_1X32		0x6001
+ 
+-- 
+2.39.2
+
