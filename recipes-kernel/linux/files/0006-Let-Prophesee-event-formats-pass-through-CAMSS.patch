@@ -1,0 +1,236 @@
+From 686d224ba80c7b9e83e5d97072e1c9a5a674dcac Mon Sep 17 00:00:00 2001
+From: Christian Dreher <cdreher@prophesee.ai>
+Date: Fri, 17 Jan 2025 19:55:31 +0100
+Subject: [PATCH] Let Prophesee event formats pass through CAMSS
+
+---
+ .../media/platform/qcom/camss/camss-csid.c    | 84 +++++++++++++++++++
+ .../media/platform/qcom/camss/camss-csiphy.c  | 12 +++
+ .../media/platform/qcom/camss/camss-ispif.c   |  8 ++
+ drivers/media/platform/qcom/camss/camss-vfe.c | 24 ++++++
+ 4 files changed, 128 insertions(+)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-csid.c b/drivers/media/platform/qcom/camss/camss-csid.c
+index 267bce94072e..fb01b5595a4d 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid.c
++++ b/drivers/media/platform/qcom/camss/camss-csid.c
+@@ -167,6 +167,34 @@ static const struct csid_format_info formats_4_1[] = {
+ 		10,
+ 		1,
+ 	},
++	{
++		MEDIA_BUS_FMT_PSEE_EVT2,
++		0x30,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_PSEE_EVT21ME,
++		0x30,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_PSEE_EVT21,
++		0x30,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_PSEE_EVT3,
++		0x30,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
+ };
+ 
+ static const struct csid_format_info formats_4_7[] = {
+@@ -317,6 +345,34 @@ static const struct csid_format_info formats_4_7[] = {
+ 		10,
+ 		1,
+ 	},
++	{
++		MEDIA_BUS_FMT_PSEE_EVT2,
++		0x30,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_PSEE_EVT21ME,
++		0x30,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_PSEE_EVT21,
++		0x30,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_PSEE_EVT3,
++		0x30,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
+ };
+ 
+ static const struct csid_format_info formats_gen2[] = {
+@@ -474,6 +530,34 @@ static const struct csid_format_info formats_gen2[] = {
+ 		14,
+ 		1,
+ 	},
++	{
++		MEDIA_BUS_FMT_PSEE_EVT2,
++		0x30,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_PSEE_EVT21ME,
++		0x30,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_PSEE_EVT21,
++		0x30,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_PSEE_EVT3,
++		0x30,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
+ };
+ 
+ const struct csid_formats csid_formats_4_1 = {
+diff --git a/drivers/media/platform/qcom/camss/camss-csiphy.c b/drivers/media/platform/qcom/camss/camss-csiphy.c
+index 2b3e2c4a153d..df24b5e1fd12 100644
+--- a/drivers/media/platform/qcom/camss/camss-csiphy.c
++++ b/drivers/media/platform/qcom/camss/camss-csiphy.c
+@@ -47,6 +47,10 @@ static const struct csiphy_format csiphy_formats_8x16[] = {
+ 	{ MEDIA_BUS_FMT_SGRBG12_1X12, 12 },
+ 	{ MEDIA_BUS_FMT_SRGGB12_1X12, 12 },
+ 	{ MEDIA_BUS_FMT_Y10_1X10, 10 },
++	{ MEDIA_BUS_FMT_PSEE_EVT2, 8 },
++	{ MEDIA_BUS_FMT_PSEE_EVT21ME, 8 },
++	{ MEDIA_BUS_FMT_PSEE_EVT21, 8 },
++	{ MEDIA_BUS_FMT_PSEE_EVT3, 8 },
+ };
+ 
+ static const struct csiphy_format csiphy_formats_8x96[] = {
+@@ -71,6 +75,10 @@ static const struct csiphy_format csiphy_formats_8x96[] = {
+ 	{ MEDIA_BUS_FMT_SGRBG14_1X14, 14 },
+ 	{ MEDIA_BUS_FMT_SRGGB14_1X14, 14 },
+ 	{ MEDIA_BUS_FMT_Y10_1X10, 10 },
++	{ MEDIA_BUS_FMT_PSEE_EVT2, 8 },
++	{ MEDIA_BUS_FMT_PSEE_EVT21ME, 8 },
++	{ MEDIA_BUS_FMT_PSEE_EVT21, 8 },
++	{ MEDIA_BUS_FMT_PSEE_EVT3, 8 },
+ };
+ 
+ static const struct csiphy_format csiphy_formats_sdm845[] = {
+@@ -96,6 +104,10 @@ static const struct csiphy_format csiphy_formats_sdm845[] = {
+ 	{ MEDIA_BUS_FMT_SRGGB14_1X14, 14 },
+ 	{ MEDIA_BUS_FMT_Y8_1X8, 8 },
+ 	{ MEDIA_BUS_FMT_Y10_1X10, 10 },
++	{ MEDIA_BUS_FMT_PSEE_EVT2, 8 },
++	{ MEDIA_BUS_FMT_PSEE_EVT21ME, 8 },
++	{ MEDIA_BUS_FMT_PSEE_EVT21, 8 },
++	{ MEDIA_BUS_FMT_PSEE_EVT3, 8 },
+ };
+ 
+ /*
+diff --git a/drivers/media/platform/qcom/camss/camss-ispif.c b/drivers/media/platform/qcom/camss/camss-ispif.c
+index be9d2f0a10c1..9a1d6a0a6a09 100644
+--- a/drivers/media/platform/qcom/camss/camss-ispif.c
++++ b/drivers/media/platform/qcom/camss/camss-ispif.c
+@@ -123,6 +123,10 @@ static const u32 ispif_formats_8x16[] = {
+ 	MEDIA_BUS_FMT_SGRBG12_1X12,
+ 	MEDIA_BUS_FMT_SRGGB12_1X12,
+ 	MEDIA_BUS_FMT_Y10_1X10,
++	MEDIA_BUS_FMT_PSEE_EVT2,
++	MEDIA_BUS_FMT_PSEE_EVT21ME,
++	MEDIA_BUS_FMT_PSEE_EVT21,
++	MEDIA_BUS_FMT_PSEE_EVT3,
+ };
+ 
+ static const u32 ispif_formats_8x96[] = {
+@@ -149,6 +153,10 @@ static const u32 ispif_formats_8x96[] = {
+ 	MEDIA_BUS_FMT_SRGGB14_1X14,
+ 	MEDIA_BUS_FMT_Y10_1X10,
+ 	MEDIA_BUS_FMT_Y10_2X8_PADHI_LE,
++	MEDIA_BUS_FMT_PSEE_EVT2,
++	MEDIA_BUS_FMT_PSEE_EVT21ME,
++	MEDIA_BUS_FMT_PSEE_EVT21,
++	MEDIA_BUS_FMT_PSEE_EVT3,
+ };
+ 
+ /*
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.c b/drivers/media/platform/qcom/camss/camss-vfe.c
+index 5b08ba823d42..457a1936fd37 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe.c
+@@ -66,6 +66,14 @@ static const struct camss_format_info formats_rdi_8x16[] = {
+ 	  PER_PLANE_DATA(0, 1, 1, 1, 1, 12) },
+ 	{ MEDIA_BUS_FMT_Y10_1X10, 10, V4L2_PIX_FMT_Y10P, 1,
+ 	  PER_PLANE_DATA(0, 1, 1, 1, 1, 10) },
++	{ MEDIA_BUS_FMT_PSEE_EVT2, 8, V4L2_PIX_FMT_PSEE_EVT2, 1,
++	  PER_PLANE_DATA(0, 1, 1, 1, 1, 8) },
++	{ MEDIA_BUS_FMT_PSEE_EVT21ME, 8, V4L2_PIX_FMT_PSEE_EVT21ME, 1,
++	  PER_PLANE_DATA(0, 1, 1, 1, 1, 8) },
++	{ MEDIA_BUS_FMT_PSEE_EVT21, 8, V4L2_PIX_FMT_PSEE_EVT21, 1,
++	  PER_PLANE_DATA(0, 1, 1, 1, 1, 8) },
++	{ MEDIA_BUS_FMT_PSEE_EVT3, 8, V4L2_PIX_FMT_PSEE_EVT3, 1,
++	  PER_PLANE_DATA(0, 1, 1, 1, 1, 8) },
+ };
+ 
+ static const struct camss_format_info formats_rdi_8x96[] = {
+@@ -115,6 +123,14 @@ static const struct camss_format_info formats_rdi_8x96[] = {
+ 	  PER_PLANE_DATA(0, 1, 1, 1, 1, 10) },
+ 	{ MEDIA_BUS_FMT_Y10_2X8_PADHI_LE, 16, V4L2_PIX_FMT_Y10, 1,
+ 	  PER_PLANE_DATA(0, 1, 1, 1, 1, 16) },
++	{ MEDIA_BUS_FMT_PSEE_EVT2, 8, V4L2_PIX_FMT_PSEE_EVT2, 1,
++	  PER_PLANE_DATA(0, 1, 1, 1, 1, 8) },
++	{ MEDIA_BUS_FMT_PSEE_EVT21ME, 8, V4L2_PIX_FMT_PSEE_EVT21ME, 1,
++	  PER_PLANE_DATA(0, 1, 1, 1, 1, 8) },
++	{ MEDIA_BUS_FMT_PSEE_EVT21, 8, V4L2_PIX_FMT_PSEE_EVT21, 1,
++	  PER_PLANE_DATA(0, 1, 1, 1, 1, 8) },
++	{ MEDIA_BUS_FMT_PSEE_EVT3, 8, V4L2_PIX_FMT_PSEE_EVT3, 1,
++	  PER_PLANE_DATA(0, 1, 1, 1, 1, 8) },
+ };
+ 
+ static const struct camss_format_info formats_rdi_845[] = {
+@@ -166,6 +182,14 @@ static const struct camss_format_info formats_rdi_845[] = {
+ 	  PER_PLANE_DATA(0, 1, 1, 1, 1, 10) },
+ 	{ MEDIA_BUS_FMT_Y10_2X8_PADHI_LE, 16, V4L2_PIX_FMT_Y10, 1,
+ 	  PER_PLANE_DATA(0, 1, 1, 1, 1, 16) },
++	{ MEDIA_BUS_FMT_PSEE_EVT2, 8, V4L2_PIX_FMT_PSEE_EVT2, 1,
++	  PER_PLANE_DATA(0, 1, 1, 1, 1, 8) },
++	{ MEDIA_BUS_FMT_PSEE_EVT21ME, 8, V4L2_PIX_FMT_PSEE_EVT21ME, 1,
++	  PER_PLANE_DATA(0, 1, 1, 1, 1, 8) },
++	{ MEDIA_BUS_FMT_PSEE_EVT21, 8, V4L2_PIX_FMT_PSEE_EVT21, 1,
++	  PER_PLANE_DATA(0, 1, 1, 1, 1, 8) },
++	{ MEDIA_BUS_FMT_PSEE_EVT3, 8, V4L2_PIX_FMT_PSEE_EVT3, 1,
++	  PER_PLANE_DATA(0, 1, 1, 1, 1, 8) },
+ };
+ 
+ static const struct camss_format_info formats_pix_8x16[] = {
+-- 
+2.39.5
+
