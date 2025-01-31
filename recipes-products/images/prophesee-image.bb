@@ -20,6 +20,7 @@ CORE_IMAGE_BASE_INSTALL += " \
     libgpiod \
     libgpiod-tools \
     prophesee-sensor-drivers \
+    metavision \
 "
 
 CORE_IMAGE_EXTRA_INSTALL += " \
