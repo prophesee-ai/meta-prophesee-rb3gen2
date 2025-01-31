@@ -1,0 +1,33 @@
+From 6a97ee4191c83294d8785f08056c2b3a395bfb6a Mon Sep 17 00:00:00 2001
+From: Christian Dreher <cdreher@prophesee.ai>
+Date: Wed, 19 Feb 2025 13:37:42 +0100
+Subject: [PATCH 18/18] Reduce V4L2 DataTransfer buffer pool to 12
+
+The RB3Gen2 default CMA size is too small to allocate 32 buffers,
+but V4L2 tends to work better with a DMA buffer heap.
+I suppose that the default allocation in V4L2 in non-cacheable, since
+raw pixel data usually isn't accessed from CPU.
+I suppose the same performance gap exist between allocation in V4L2
+and from DMA buffer heap in RB3Gen2.
+A proper fix would be to define a buffer heap properly sized, but 12
+buffers should be enough for me, and this fix is quicker.
+---
+ hal_psee_plugins/include/boards/v4l2/v4l2_data_transfer.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hal_psee_plugins/include/boards/v4l2/v4l2_data_transfer.h b/hal_psee_plugins/include/boards/v4l2/v4l2_data_transfer.h
+index c8ec10ebb4..6019b49221 100644
+--- a/hal_psee_plugins/include/boards/v4l2/v4l2_data_transfer.h
++++ b/hal_psee_plugins/include/boards/v4l2/v4l2_data_transfer.h
+@@ -40,7 +40,7 @@ public:
+     ~V4l2DataTransfer();
+ 
+ private:
+-    static constexpr int device_buffer_number = 32;
++    static constexpr int device_buffer_number = 12;
+ 
+     // The memory type currently in use
+     const enum v4l2_memory memtype_;
+-- 
+2.39.5
+

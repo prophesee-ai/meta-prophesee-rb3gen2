@@ -1,0 +1,266 @@
+From 8e65a1249251e3f80f6ec82fc0bf855890058414 Mon Sep 17 00:00:00 2001
+From: Ayman Khamouma <akhamouma@prophesee.ai>
+Date: Thu, 10 Oct 2024 15:45:19 +0200
+Subject: [PATCH 06/17] V4L2: Introducing V4L2Crop facility
+
+Signed-off-by: Ayman Khamouma <akhamouma@prophesee.ai>
+---
+ .../psee_hw_layer/devices/v4l2/v4l2_crop.h    |  85 ++++++++++++++
+ .../src/devices/v4l2/CMakeLists.txt           |   1 +
+ .../src/devices/v4l2/v4l2_crop.cpp            | 104 ++++++++++++++++++
+ .../src/devices/v4l2/v4l2_device_builder.cpp  |  12 +-
+ 4 files changed, 194 insertions(+), 8 deletions(-)
+ create mode 100644 hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/devices/v4l2/v4l2_crop.h
+ create mode 100644 hal_psee_plugins/src/devices/v4l2/v4l2_crop.cpp
+
+diff --git a/hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/devices/v4l2/v4l2_crop.h b/hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/devices/v4l2/v4l2_crop.h
+new file mode 100644
+index 0000000000..d91b54f3a7
+--- /dev/null
++++ b/hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/devices/v4l2/v4l2_crop.h
+@@ -0,0 +1,85 @@
++/**********************************************************************************************************************
++ * Copyright (c) Prophesee S.A.                                                                                       *
++ *                                                                                                                    *
++ * Licensed under the Apache License, Version 2.0 (the "License");                                                    *
++ * you may not use this file except in compliance with the License.                                                   *
++ * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0                                 *
++ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed   *
++ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.                      *
++ * See the License for the specific language governing permissions and limitations under the License.                 *
++ **********************************************************************************************************************/
++
++#ifndef METAVISION_HAL_V4L2_CROP_H
++#define METAVISION_HAL_V4L2_CROP_H
++
++#include "metavision/hal/facilities/i_roi.h"
++#include "boards/v4l2/v4l2_device.h"
++
++namespace Metavision {
++
++class V4L2Crop : public I_ROI {
++public:
++    V4L2Crop(std::shared_ptr<V4L2DeviceControl> controls);
++
++    /// @brief Returns the default device width
++    ///
++    /// This values is obtained from the default Device passed in the constructor of the class.
++    int device_width() const;
++
++    /// @brief Returns the default device height
++    ///
++    /// This values is obtained from the default Device passed in the constructor of the class.
++    int device_height() const;
++
++    /// @brief Applies ROI
++    /// @param state If true, enables ROI. If false, disables it
++    /// @warning At least one ROI should have been set before calling this function
++    /// @return true on success
++    bool enable(bool state) override;
++
++    bool is_enabled() const override;
++
++    /// @brief Sets the window mode
++    /// @param mode window mode to set (ROI or RONI)
++    /// @return true on success
++    bool set_mode(const Mode &mode) override;
++
++    I_ROI::Mode get_mode() const override;
++
++    /// @brief Gets the maximum number of windows
++    /// @return the maximum number of windows that can be set via @ref set_windows
++    size_t get_max_supported_windows_count() const override;
++
++    /// @brief Sets multiple ROIs from row and column binary maps
++    ///
++    /// The binary maps (std::vector<bool>) arguments must have the sensor's dimension
++    ///
++    /// @param cols Vector of boolean of size sensor's width representing the binary map of the columns to
++    /// enable
++    /// @param rows Vector of boolean of size sensor's height representing the binary map of the rows to
++    /// enable
++    /// @return true if input have the correct dimension and the ROI is set correctly, false otherwise
++    /// @warning For a pixel to be enabled, it must be enabled on both its row and column
++    bool set_lines(const std::vector<bool> &cols, const std::vector<bool> &rows) override;
++
++    std::vector<I_ROI::Window> get_windows() const override;
++
++    bool get_lines(std::vector<bool> &cols, std::vector<bool> &rows) const override;
++
++private:
++    /// @brief Implementation of `set_windows`
++    /// @param windows A vector of windows to set
++    /// @return true on success
++    /// @throw an exception if the size of the vector is higher than the maximum supported number
++    ///        of windows (see @ref get_max_supported_windows_count)
++    bool set_windows_impl(const std::vector<Window> &windows) override;
++
++    bool enabled_;
++    std::shared_ptr<V4L2DeviceControl> device_;
++    v4l2_rect rect_;
++    v4l2_rect native_rect_;
++};
++
++} // namespace Metavision
++
++#endif // METAVISION_HAL_V4L2_CROP_H
+diff --git a/hal_psee_plugins/src/devices/v4l2/CMakeLists.txt b/hal_psee_plugins/src/devices/v4l2/CMakeLists.txt
+index b3073a418b..e09cb64d88 100644
+--- a/hal_psee_plugins/src/devices/v4l2/CMakeLists.txt
++++ b/hal_psee_plugins/src/devices/v4l2/CMakeLists.txt
+@@ -16,4 +16,5 @@ target_sources(metavision_psee_hw_layer_obj PRIVATE
+     ${CMAKE_CURRENT_SOURCE_DIR}/v4l2_ll_biases.cpp
+     ${CMAKE_CURRENT_SOURCE_DIR}/v4l2_erc.cpp
+     ${CMAKE_CURRENT_SOURCE_DIR}/v4l2_roi_interface.cpp
++    ${CMAKE_CURRENT_SOURCE_DIR}/v4l2_crop.cpp
+ )
+diff --git a/hal_psee_plugins/src/devices/v4l2/v4l2_crop.cpp b/hal_psee_plugins/src/devices/v4l2/v4l2_crop.cpp
+new file mode 100644
+index 0000000000..8cf80d2297
+--- /dev/null
++++ b/hal_psee_plugins/src/devices/v4l2/v4l2_crop.cpp
+@@ -0,0 +1,104 @@
++/**********************************************************************************************************************
++ * Copyright (c) Prophesee S.A.                                                                                       *
++ *                                                                                                                    *
++ * Licensed under the Apache License, Version 2.0 (the "License");                                                    *
++ * you may not use this file except in compliance with the License.                                                   *
++ * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0                                 *
++ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed   *
++ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.                      *
++ * See the License for the specific language governing permissions and limitations under the License.                 *
++ **********************************************************************************************************************/
++
++#include "metavision/psee_hw_layer/devices/v4l2/v4l2_crop.h"
++#include "boards/v4l2/v4l2_device.h"
++#include <cmath>
++
++namespace Metavision {
++
++void raise_error(const std::string &str);
++
++V4L2Crop::V4L2Crop(std::shared_ptr<V4L2DeviceControl> device) : device_(device), enabled_(false) {
++    // set default crop to native size
++    device_->get_native_size(device_->get_sensor_entity()->fd, rect_);
++    native_rect_ = rect_;
++    // reset
++    device->set_crop(device->get_sensor_entity()->fd, native_rect_);
++}
++
++int V4L2Crop::device_width() const {
++    return native_rect_.width;
++}
++
++int V4L2Crop::device_height() const {
++    return native_rect_.height;
++}
++
++bool V4L2Crop::enable(bool state) {
++    enabled_ = state;
++    if (enabled_) {
++        device_->set_crop(device_->get_sensor_entity()->fd, rect_);
++    } else {
++        device_->set_crop(device_->get_sensor_entity()->fd, native_rect_);
++    }
++    return true;
++}
++
++bool V4L2Crop::is_enabled() const {
++    return enabled_;
++}
++
++bool V4L2Crop::set_mode(const Mode &mode) {
++    raise_error("V4L2Crop::set_mode() not supported by device");
++    return false;
++}
++
++I_ROI::Mode V4L2Crop::get_mode() const {
++    return I_ROI::Mode::ROI;
++}
++
++size_t V4L2Crop::get_max_supported_windows_count() const {
++    return 1;
++}
++
++bool V4L2Crop::set_lines(const std::vector<bool> &cols, const std::vector<bool> &rows) {
++    throw std::runtime_error("V4L2Crop::set_lines() not implemented");
++}
++
++bool V4L2Crop::set_windows_impl(const std::vector<Window> &windows) {
++    if (windows.size() > 1) {
++        MV_HAL_LOG_ERROR() << "Only one window is supported";
++        return false;
++    }
++
++    const auto &window = windows[0];
++
++    if (window.width <= 0 || window.height <= 0) {
++        return false;
++    }
++
++    rect_.left   = std::max(0, window.x);
++    rect_.top    = std::max(0, window.y);
++    rect_.width  = std::min(device_width() - rect_.left, window.width);
++    rect_.height = std::min(device_width() - rect_.top, window.height);
++
++    if (enabled_) {
++        device_->set_crop(device_->get_sensor_entity()->fd, rect_);
++    }
++
++    return true;
++}
++
++std::vector<I_ROI::Window> V4L2Crop::get_windows() const {
++    Window window;
++    window.x      = rect_.left;
++    window.y      = rect_.top;
++    window.width  = rect_.width;
++    window.height = rect_.height;
++    return {window};
++}
++
++bool V4L2Crop::get_lines(std::vector<bool> &cols, std::vector<bool> &rows) const {
++    throw std::runtime_error("V4L2Crop::set_lines() not implemented");
++}
++
++} // namespace Metavision
+diff --git a/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp b/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp
+index b07fc74cf2..b8decfa2ed 100644
+--- a/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp
++++ b/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp
+@@ -14,18 +14,12 @@
+ #include "metavision/psee_hw_layer/boards/treuzell/board_command.h"
+ #include "metavision/psee_hw_layer/boards/v4l2/v4l2_board_command.h"
+ #include "metavision/psee_hw_layer/utils/psee_format.h"
+-#include "metavision/psee_hw_layer/utils/register_map.h"
+-#include "metavision/psee_hw_layer/facilities/psee_hw_register.h"
+ #include "metavision/hal/utils/device_builder.h"
+ 
+ #include "metavision/psee_hw_layer/devices/v4l2/v4l2_ll_biases.h"
+ #include "metavision/psee_hw_layer/devices/v4l2/v4l2_erc.h"
+ #include "metavision/psee_hw_layer/devices/v4l2/v4l2_roi_interface.h"
+-
+-#include "geometries/hd_geometry.h"
+-
+-#include "metavision/psee_hw_layer/devices/common/antiflicker_filter.h"
+-#include "metavision/psee_hw_layer/devices/common/event_trail_filter.h"
++#include "metavision/psee_hw_layer/devices/v4l2/v4l2_crop.h"
+ 
+ #include "boards/v4l2/v4l2_device.h"
+ #include "boards/v4l2/v4l2_hardware_identification.h"
+@@ -70,9 +64,11 @@ bool V4L2DeviceBuilder::build_device(std::shared_ptr<BoardCommand> cmd, DeviceBu
+ 
+     // check if has roi v4l2 control OR if crop ioctl is supported
+ 
+-    if (ctrl->can_crop(ctrl->get_video_entity()->fd) || controls->has("roi")) {
++    if (controls->has("roi")) {
+         MV_HAL_LOG_TRACE() << "Found ROI controls";
+         device_builder.add_facility(std::make_unique<V4L2RoiInterface>(controls));
++    } else if (ctrl->can_crop(ctrl->get_sensor_entity()->fd)) {
++        device_builder.add_facility(std::make_unique<V4L2Crop>(ctrl));
+     }
+ 
+     return true;
+-- 
+2.39.5
+

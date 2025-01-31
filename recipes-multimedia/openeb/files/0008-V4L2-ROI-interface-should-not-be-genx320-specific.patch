@@ -1,0 +1,124 @@
+From 4253f52b243f1b739ed6dc3e91391de7a0a765a3 Mon Sep 17 00:00:00 2001
+From: Ayman Khamouma <akhamouma@prophesee.ai>
+Date: Sat, 12 Oct 2024 15:27:39 +0200
+Subject: [PATCH 08/17] V4L2: ROI interface should not be genx320 specific
+
+---
+ .../devices/v4l2/v4l2_roi_interface.h         |  8 +++++---
+ .../src/devices/v4l2/v4l2_device_builder.cpp  |  3 +--
+ .../src/devices/v4l2/v4l2_roi_interface.cpp   | 20 +++++++++++--------
+ 3 files changed, 18 insertions(+), 13 deletions(-)
+
+diff --git a/hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/devices/v4l2/v4l2_roi_interface.h b/hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/devices/v4l2/v4l2_roi_interface.h
+index e4b9122b4f..7cbe850156 100644
+--- a/hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/devices/v4l2/v4l2_roi_interface.h
++++ b/hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/devices/v4l2/v4l2_roi_interface.h
+@@ -14,15 +14,16 @@
+ 
+ #include "metavision/hal/facilities/i_roi.h"
+ #include "metavision/psee_hw_layer/boards/v4l2/v4l2_controls.h"
++#include "boards/v4l2/v4l2_device.h"
+ 
+ namespace Metavision {
+ 
+ class V4L2RoiInterface : public I_ROI {
+ public:
+-    V4L2RoiInterface(std::shared_ptr<V4L2Controls> controls);
++    V4L2RoiInterface(std::shared_ptr<V4L2DeviceControl> device);
+ 
+-    /// @brief Returns the default device width
+     ///
++    /// @brief Returns the default device width
+     /// This values is obtained from the default Device passed in the constructor of the class.
+     int device_width() const;
+ 
+@@ -75,7 +76,8 @@ private:
+     bool set_windows_impl(const std::vector<Window> &windows);
+ 
+     bool enabled_;
+-    std::shared_ptr<V4L2Controls> controls_;
++    // std::shared_ptr<V4L2Controls> controls_;
++    std::shared_ptr<V4L2DeviceControl> device_;
+ };
+ 
+ } // namespace Metavision
+diff --git a/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp b/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp
+index b8decfa2ed..fb5a4a3ce3 100644
+--- a/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp
++++ b/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp
+@@ -63,10 +63,9 @@ bool V4L2DeviceBuilder::build_device(std::shared_ptr<BoardCommand> cmd, DeviceBu
+     }
+ 
+     // check if has roi v4l2 control OR if crop ioctl is supported
+-
+     if (controls->has("roi")) {
+         MV_HAL_LOG_TRACE() << "Found ROI controls";
+-        device_builder.add_facility(std::make_unique<V4L2RoiInterface>(controls));
++        device_builder.add_facility(std::make_unique<V4L2RoiInterface>(ctrl));
+     } else if (ctrl->can_crop(ctrl->get_sensor_entity()->fd)) {
+         device_builder.add_facility(std::make_unique<V4L2Crop>(ctrl));
+     }
+diff --git a/hal_psee_plugins/src/devices/v4l2/v4l2_roi_interface.cpp b/hal_psee_plugins/src/devices/v4l2/v4l2_roi_interface.cpp
+index 3b5765601a..1a7a66dec3 100644
+--- a/hal_psee_plugins/src/devices/v4l2/v4l2_roi_interface.cpp
++++ b/hal_psee_plugins/src/devices/v4l2/v4l2_roi_interface.cpp
+@@ -15,19 +15,20 @@ namespace Metavision {
+ 
+ void raise_error(const std::string &str);
+ 
+-V4L2RoiInterface::V4L2RoiInterface(std::shared_ptr<V4L2Controls> controls) : controls_(controls), enabled_(false) {
+-    auto ctrl = controls_->get("roi_reset");
++V4L2RoiInterface::V4L2RoiInterface(std::shared_ptr<V4L2DeviceControl> device) : device_(device), enabled_(false) {
++    auto controls = device_->get_controls();
++    auto ctrl     = controls->get("roi_reset");
+     if (ctrl.push()) {
+         MV_HAL_LOG_ERROR() << "Failed to reset roi";
+     }
+ }
+ 
+ int V4L2RoiInterface::device_width() const {
+-    return 320;
++    return device_->get_width();
+ }
+ 
+ int V4L2RoiInterface::device_height() const {
+-    return 320;
++    return device_->get_height();
+ }
+ 
+ bool V4L2RoiInterface::enable(bool state) {
+@@ -40,7 +41,8 @@ bool V4L2RoiInterface::is_enabled() const {
+ }
+ 
+ bool V4L2RoiInterface::set_mode(const Mode &mode) {
+-    auto ctrl = controls_->get("roi_roni");
++    auto controls = device_->get_controls();
++    auto ctrl     = controls->get("roi_roni");
+     switch (mode) {
+     case I_ROI::Mode::ROI:
+         return ctrl.set_bool(false) < 0 ? false : true;
+@@ -52,8 +54,9 @@ bool V4L2RoiInterface::set_mode(const Mode &mode) {
+ }
+ 
+ I_ROI::Mode V4L2RoiInterface::get_mode() const {
+-    auto ctrl    = controls_->get("roi_roni");
+-    auto is_roni = ctrl.get_bool().value();
++    auto controls = device_->get_controls();
++    auto ctrl     = controls->get("roi_roni");
++    auto is_roni  = ctrl.get_bool().value();
+     return is_roni ? I_ROI::Mode::RONI : I_ROI::Mode::ROI;
+ }
+ 
+@@ -88,7 +91,8 @@ struct roi_set {
+ };
+ 
+ bool V4L2RoiInterface::set_windows_impl(const std::vector<Window> &windows) {
+-    auto ctrl            = controls_->get("roi_set");
++    auto controls        = device_->get_controls();
++    auto ctrl            = controls->get("roi_set");
+     struct roi_set *rois = ctrl.get_compound<struct roi_set>().value();
+ 
+     if (windows.size() > get_max_supported_windows_count()) {
+-- 
+2.39.5
+

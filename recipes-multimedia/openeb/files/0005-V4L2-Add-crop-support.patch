@@ -1,0 +1,140 @@
+From 939f32010dfaf514145e6dc3b939ce31cc95e248 Mon Sep 17 00:00:00 2001
+From: Ayman Khamouma <akhamouma@prophesee.ai>
+Date: Wed, 9 Oct 2024 17:36:26 +0200
+Subject: [PATCH 05/17] V4L2: Add crop support
+
+Signed-off-by: Ayman Khamouma <akhamouma@prophesee.ai>
+---
+ .../include/boards/v4l2/v4l2_device.h         | 65 ++++++++++++++++---
+ .../src/devices/v4l2/v4l2_device_builder.cpp  | 11 ++--
+ 2 files changed, 63 insertions(+), 13 deletions(-)
+
+diff --git a/hal_psee_plugins/include/boards/v4l2/v4l2_device.h b/hal_psee_plugins/include/boards/v4l2/v4l2_device.h
+index 2c81d45a73..5d2425c192 100644
+--- a/hal_psee_plugins/include/boards/v4l2/v4l2_device.h
++++ b/hal_psee_plugins/include/boards/v4l2/v4l2_device.h
+@@ -20,6 +20,7 @@
+ #include <linux/media.h>
+ 
+ #include <linux/videodev2.h>
++#include <linux/v4l2-subdev.h>
+ 
+ #include "metavision/hal/facilities/i_camera_synchronization.h"
+ #include "metavision/hal/utils/device_control.h"
+@@ -65,10 +66,9 @@ public:
+         return media_fd_;
+     }
+ 
+-    const struct media_entity* get_sensor_entity() const {
+-        auto sensor = std::find_if(entities_.begin(), entities_.end(), [](const auto &entity) {
+-            return entity.type == MEDIA_ENT_T_V4L2_SUBDEV_SENSOR;
+-        });
++    const struct media_entity *get_sensor_entity() const {
++        auto sensor = std::find_if(entities_.begin(), entities_.end(),
++                                   [](const auto &entity) { return entity.type == MEDIA_ENT_T_V4L2_SUBDEV_SENSOR; });
+ 
+         if (sensor == entities_.end()) {
+             return nullptr;
+@@ -77,10 +77,9 @@ public:
+         return &(*sensor);
+     }
+ 
+-    const struct media_entity* get_video_entity() const {
+-        auto video = std::find_if(entities_.begin(), entities_.end(), [](const auto &entity) {
+-            return entity.type == MEDIA_ENT_T_DEVNODE_V4L;
+-        });
++    const struct media_entity *get_video_entity() const {
++        auto video = std::find_if(entities_.begin(), entities_.end(),
++                                  [](const auto &entity) { return entity.type == MEDIA_ENT_T_DEVNODE_V4L; });
+ 
+         if (video == entities_.end()) {
+             return nullptr;
+@@ -89,6 +88,56 @@ public:
+         return &(*video);
+     }
+ 
++    bool can_crop(int fd) {
++        struct v4l2_subdev_selection sel = {0};
++
++        sel.which  = V4L2_SUBDEV_FORMAT_ACTIVE;
++        sel.pad    = 0;
++        sel.target = V4L2_SEL_TGT_CROP_ACTIVE;
++        if (ioctl(fd, VIDIOC_SUBDEV_G_CROP, &sel) == -EINVAL) {
++            MV_HAL_LOG_TRACE() << "device can't crop";
++            return false;
++        }
++        return true;
++    }
++
++    void set_crop(int fd, const struct v4l2_rect &rect) {
++        struct v4l2_subdev_selection sel = {0};
++
++        sel.pad    = 0;
++        sel.which  = V4L2_SUBDEV_FORMAT_ACTIVE;
++        sel.target = V4L2_SEL_TGT_CROP;
++        sel.r      = rect;
++        if (ioctl(fd, VIDIOC_SUBDEV_S_SELECTION, &sel) < 0) {
++            raise_error("VIDIOC_SUBDEV_S_SELECTION failed");
++        }
++    }
++
++    void get_native_size(int fd, struct v4l2_rect &rect) {
++        struct v4l2_subdev_selection sel = {0};
++
++        sel.pad    = 0;
++        sel.which  = V4L2_SUBDEV_FORMAT_ACTIVE;
++        sel.target = V4L2_SEL_TGT_NATIVE_SIZE;
++        if (ioctl(fd, VIDIOC_SUBDEV_G_SELECTION, &sel) < 0) {
++            raise_error("VIDIOC_SUBDEV_G_SELECTION failed");
++        }
++        rect = sel.r;
++    }
++
++    void get_crop(int fd, struct v4l2_rect &rect) {
++        struct v4l2_subdev_selection sel = {0};
++
++        std::memset(&sel, 0, sizeof(sel));
++        sel.pad    = 0;
++        sel.which  = V4L2_SUBDEV_FORMAT_ACTIVE;
++        sel.target = V4L2_SEL_TGT_CROP;
++        if (ioctl(fd, VIDIOC_SUBDEV_G_SELECTION, &sel) < 0) {
++            raise_error("VIDIOC_SUBDEV_G_SELECTION failed");
++        }
++        rect = sel.r;
++    }
++
+     int enumerate_entities();
+     std::shared_ptr<V4L2Controls> get_controls();
+ 
+diff --git a/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp b/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp
+index 8cff27dd70..b07fc74cf2 100644
+--- a/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp
++++ b/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp
+@@ -44,10 +44,9 @@ bool V4L2DeviceBuilder::build_device(std::shared_ptr<BoardCommand> cmd, DeviceBu
+                                      const DeviceConfig &config) {
+     auto v4l2cmd = std::dynamic_pointer_cast<V4L2BoardCommand>(cmd);
+ 
+-    auto ctrl = v4l2cmd->get_device_control();
+-    auto software_info = device_builder.get_plugin_software_info();
+-    auto hw_identification =
+-        device_builder.add_facility(std::make_unique<V4l2HwIdentification>(ctrl, software_info));
++    auto ctrl              = v4l2cmd->get_device_control();
++    auto software_info     = device_builder.get_plugin_software_info();
++    auto hw_identification = device_builder.add_facility(std::make_unique<V4l2HwIdentification>(ctrl, software_info));
+ 
+     try {
+         size_t raw_size_bytes = 0;
+@@ -69,7 +68,9 @@ bool V4L2DeviceBuilder::build_device(std::shared_ptr<BoardCommand> cmd, DeviceBu
+         device_builder.add_facility(std::make_unique<V4L2Erc>(controls));
+     }
+ 
+-    if (controls->has("roi")) {
++    // check if has roi v4l2 control OR if crop ioctl is supported
++
++    if (ctrl->can_crop(ctrl->get_video_entity()->fd) || controls->has("roi")) {
+         MV_HAL_LOG_TRACE() << "Found ROI controls";
+         device_builder.add_facility(std::make_unique<V4L2RoiInterface>(controls));
+     }
+-- 
+2.39.5
+

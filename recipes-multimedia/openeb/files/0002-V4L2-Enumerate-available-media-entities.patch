@@ -1,0 +1,336 @@
+From 82868bc10294323a1445a001e63fbf4b31cea319 Mon Sep 17 00:00:00 2001
+From: Ayman Khamouma <akhamouma@prophesee.ai>
+Date: Wed, 2 Oct 2024 16:02:09 +0200
+Subject: [PATCH 02/17] V4L2: Enumerate available media entities
+
+Signed-off-by: Ayman Khamouma <akhamouma@prophesee.ai>
+---
+ .../include/boards/v4l2/v4l2_device.h         | 42 ++++++++-
+ .../src/boards/v4l2/v4l2_board_command.cpp    | 33 +------
+ .../src/boards/v4l2/v4l2_camera_discovery.cpp | 17 +---
+ .../src/boards/v4l2/v4l2_device.cpp           | 89 +++++++++++++++----
+ .../src/devices/v4l2/v4l2_device_builder.cpp  |  2 +-
+ 5 files changed, 121 insertions(+), 62 deletions(-)
+
+diff --git a/hal_psee_plugins/include/boards/v4l2/v4l2_device.h b/hal_psee_plugins/include/boards/v4l2/v4l2_device.h
+index f376e1596f..2c81d45a73 100644
+--- a/hal_psee_plugins/include/boards/v4l2/v4l2_device.h
++++ b/hal_psee_plugins/include/boards/v4l2/v4l2_device.h
+@@ -16,6 +16,8 @@
+ #include <cstddef>
+ #include <iterator>
+ #include <string>
++#include <filesystem>
++#include <linux/media.h>
+ 
+ #include <linux/videodev2.h>
+ 
+@@ -29,9 +31,17 @@ void raise_error(const std::string &str);
+ 
+ using V4l2Capability = struct v4l2_capability;
+ 
++struct media_entity {
++    int fd;
++    std::filesystem::path path;
++    uint32_t type;
++    struct media_entity_desc desc;
++};
++
+ class V4L2DeviceControl : public DeviceControl {
+     V4l2Capability cap_;
+-    int fd_ = -1;
++    int media_fd_ = -1;
++    std::vector<media_entity> entities_;
+     std::shared_ptr<V4L2Controls> controls_;
+ 
+ public:
+@@ -51,9 +61,35 @@ public:
+ 
+     V4l2Capability get_capability() const;
+ 
+-    int get_fd() const {
+-        return fd_;
++    int get_media_fd() const {
++        return media_fd_;
++    }
++
++    const struct media_entity* get_sensor_entity() const {
++        auto sensor = std::find_if(entities_.begin(), entities_.end(), [](const auto &entity) {
++            return entity.type == MEDIA_ENT_T_V4L2_SUBDEV_SENSOR;
++        });
++
++        if (sensor == entities_.end()) {
++            return nullptr;
++        }
++
++        return &(*sensor);
+     }
++
++    const struct media_entity* get_video_entity() const {
++        auto video = std::find_if(entities_.begin(), entities_.end(), [](const auto &entity) {
++            return entity.type == MEDIA_ENT_T_DEVNODE_V4L;
++        });
++
++        if (video == entities_.end()) {
++            return nullptr;
++        }
++
++        return &(*video);
++    }
++
++    int enumerate_entities();
+     std::shared_ptr<V4L2Controls> get_controls();
+ 
+     // DeviceControl
+diff --git a/hal_psee_plugins/src/boards/v4l2/v4l2_board_command.cpp b/hal_psee_plugins/src/boards/v4l2/v4l2_board_command.cpp
+index d8a23a6689..400e6b99fa 100644
+--- a/hal_psee_plugins/src/boards/v4l2/v4l2_board_command.cpp
++++ b/hal_psee_plugins/src/boards/v4l2/v4l2_board_command.cpp
+@@ -33,36 +33,9 @@
+ namespace Metavision {
+ 
+ V4L2BoardCommand::V4L2BoardCommand(std::string device_path) {
+-    // TODO: based on the /dev/mediaX device (not available with thor96 psee eb driver), extract the pipeline topology,
+-    // extract the /dev/videoX and /dev/v4l-subdevX associated entities, and populate the DataTransfer with it and board
+-    // command with them. Right now, we'll just hard code data transfer with /dev/video0 and the board command with
+-    // /dev/v4l-subdev1 ¯\_(ツ)_/¯ more details in:
+-    // https://github.com/gjasny/v4l-utils/blob/master/utils/media-ctl/media-ctl.c#L526 As of today, it is also not
+-    // possible to use the `v4l2-dbg -d /dev/video0 -c subdev1` way to interact with the sensor. (with the
+-    // V4L2_CHIP_MATCH_SUBDEV subdev index matching method) One needs to directly use the /dev/v4l-subdevX device.
+-    // (v4l2-dbg -d /dev/v4l-subdev1)
+     struct stat st;
+-
+     device_ = std::make_shared<V4L2DeviceControl>(device_path);
+-
+-    // TODO: get video_path_ and sensor_subdev_path_ from media_path when available.
+-    // Hack for now, let's just dismiss the /dev/mediaX device and hardcode the video and sensor subdev path.
+-    // More hack: sometimes it's not subdev1
+-    const char *sensor_path = getenv("V4L2_SENSOR_PATH");
+-    if (!sensor_path)
+-        sensor_path = "/dev/v4l-subdev1";
+-
+-    // and now for sensor_fd_:
+-    if (-1 == stat(sensor_path, &st))
+-        raise_error("Cannot identify device /dev/v4l-subdev1.");
+-
+-    if (!S_ISCHR(st.st_mode))
+-        throw std::runtime_error("/dev/v4l-subdev1 is not a device");
+-
+-    sensor_fd_ = open(sensor_path, O_RDWR);
+-    if (-1 == sensor_fd_) {
+-        raise_error("Cannot open device /dev/v4l-subdev1");
+-    };
++    sensor_fd_ = device_->get_sensor_entity()->fd;
+ }
+ 
+ V4L2BoardCommand::~V4L2BoardCommand() {}
+@@ -160,10 +133,10 @@ std::unique_ptr<DataTransfer::RawDataProducer>
+ 
+     // If the environment set a heap, us it, otherwise, use the driver's allocator
+     if (std::getenv("V4L2_HEAP"))
+-        return std::make_unique<V4l2DataTransfer>(device_->get_fd(), raw_event_size_bytes, "/dev/dma_heap",
++        return std::make_unique<V4l2DataTransfer>(device_->get_video_entity()->fd, raw_event_size_bytes, "/dev/dma_heap",
+                                                   std::getenv("V4L2_HEAP"));
+     else
+-        return std::make_unique<V4l2DataTransfer>(device_->get_fd(), raw_event_size_bytes);
++        return std::make_unique<V4l2DataTransfer>(device_->get_video_entity()->fd, raw_event_size_bytes);
+ }
+ 
+ } // namespace Metavision
+diff --git a/hal_psee_plugins/src/boards/v4l2/v4l2_camera_discovery.cpp b/hal_psee_plugins/src/boards/v4l2/v4l2_camera_discovery.cpp
+index b8fb1d4eb0..20e8db1197 100644
+--- a/hal_psee_plugins/src/boards/v4l2/v4l2_camera_discovery.cpp
++++ b/hal_psee_plugins/src/boards/v4l2/v4l2_camera_discovery.cpp
+@@ -34,25 +34,16 @@
+ #include "metavision/hal/utils/hal_log.h"
+ #include "metavision/psee_hw_layer/utils/psee_format.h"
+ #include "metavision/psee_hw_layer/boards/v4l2/v4l2_board_command.h"
++#include <filesystem>
+ 
+ #include "utils/make_decoder.h"
+ 
+ namespace Metavision {
+ 
+ V4l2CameraDiscovery::V4l2CameraDiscovery() {
+-    std::vector<std::string> device_path = {
+-        // We might want to iterate over all /dev/mediaX files
+-        // "/dev/media0", "/dev/media1", "/dev/media2", "/dev/media3", "/dev/media4",
+-        //
+-        // Because Thor96 doesn't support proper v4l2 device discovery mechanism, let's hard-code it for now
+-        "/dev/video0",
+-    };
+-
+-    for (auto device_name : device_path) {
+-        try {
+-            devices_.emplace_back(std::make_shared<V4L2BoardCommand>(device_name));
+-        } catch (std::exception &e) {
+-            MV_HAL_LOG_TRACE() << "Cannot open V4L2 device '" << device_name << "' (err: " << e.what();
++    for (const auto &entry : std::filesystem::directory_iterator("/dev/")) {
++        if (entry.path().string().find("/dev/media") == 0) {
++            devices_.emplace_back(std::make_shared<V4L2BoardCommand>(entry.path()));
+         }
+     }
+ }
+diff --git a/hal_psee_plugins/src/boards/v4l2/v4l2_device.cpp b/hal_psee_plugins/src/boards/v4l2/v4l2_device.cpp
+index a92bae2003..3311e3e647 100644
+--- a/hal_psee_plugins/src/boards/v4l2/v4l2_device.cpp
++++ b/hal_psee_plugins/src/boards/v4l2/v4l2_device.cpp
+@@ -11,6 +11,7 @@
+ 
+ #include <cstdint>
+ #include <cstring>
++#include <filesystem>
+ #include "boards/v4l2/v4l2_device.h"
+ 
+ // Linux specific headers
+@@ -19,6 +20,10 @@
+ #include <string>
+ #include <sys/stat.h>
+ #include <sys/ioctl.h>
++#include <fcntl.h>
++#include <unistd.h>
++
++#include "metavision/psee_hw_layer/boards/v4l2/v4l2_controls.h"
+ 
+ using namespace Metavision;
+ 
+@@ -26,37 +31,47 @@ void Metavision::raise_error(const std::string &str) {
+     throw std::runtime_error(str + " (" + std::to_string(errno) + " - " + std::strerror(errno) + ")");
+ }
+ 
+-V4L2DeviceControl::V4L2DeviceControl(const std::string &dev_name) {
++V4L2DeviceControl::V4L2DeviceControl(const std::string &devpath) {
+     struct stat st;
+-    if (-1 == stat(dev_name.c_str(), &st))
+-        raise_error(dev_name + "Cannot identify device.");
++    if (-1 == stat(devpath.c_str(), &st))
++        raise_error(devpath + "Cannot identify device.");
+ 
+     if (!S_ISCHR(st.st_mode))
+-        throw std::runtime_error(dev_name + " is not a device");
++        throw std::runtime_error(devpath + " is not a device");
+ 
+-    fd_ = open(dev_name.c_str(), O_RDWR /* required */ | O_NONBLOCK, 0);
++    media_fd_ = open(devpath.c_str(), O_RDWR | O_NONBLOCK, 0);
++    if (-1 == media_fd_) {
++        raise_error(devpath + "Cannot open media device");
++    }
+ 
+-    if (-1 == fd_) {
+-        raise_error(dev_name + "Cannot open device");
++    enumerate_entities();
++
++    auto video_ent = get_video_entity();
++    if (video_ent == nullptr) {
++        throw std::runtime_error("Could not find a v4l2 video device");
+     }
+ 
+-    if (ioctl(fd_, VIDIOC_QUERYCAP, &cap_)) {
++    if (ioctl(video_ent->fd, VIDIOC_QUERYCAP, &cap_)) {
+         if (EINVAL == errno) {
+-            throw std::runtime_error(dev_name + " is not a V4L2 device");
++            throw std::runtime_error(devpath + " is not a V4L2 device");
+         } else {
+             raise_error("VIDIOC_QUERYCAP failed");
+         }
+     }
+ 
+     if (!(cap_.capabilities & V4L2_CAP_VIDEO_CAPTURE))
+-        throw std::runtime_error(dev_name + " is not video capture device");
++        throw std::runtime_error(devpath + " is not video capture device");
+ 
+     if (!(cap_.capabilities & V4L2_CAP_STREAMING))
+-        throw std::runtime_error(dev_name + " does not support streaming i/o");
++        throw std::runtime_error(devpath + " does not support streaming i/o");
++
++    auto sensor_ent = get_sensor_entity();
++    if (sensor_ent == nullptr) {
++        throw std::runtime_error("Could not find a v4l2 sensor subdevice");
++    }
+ 
+     // only expose sensor controls for now
+-    int sensor_fd = open(getenv("V4L2_SENSOR_PATH"), O_RDWR | O_NONBLOCK, 0);
+-    controls_ = std::make_shared<V4L2Controls>(sensor_fd);
++    controls_ = std::make_shared<V4L2Controls>(sensor_ent->fd);
+     // Note: this code expects the V4L2 device to be configured to output a supported format
+ }
+ 
+@@ -66,12 +81,12 @@ V4l2Capability V4L2DeviceControl::get_capability() const {
+ 
+ void V4L2DeviceControl::start() {
+     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+-    if (ioctl(fd_, VIDIOC_STREAMON, &type))
++    if (ioctl(get_video_entity()->fd, VIDIOC_STREAMON, &type))
+         raise_error("VIDIOC_STREAMON failed");
+ }
+ void V4L2DeviceControl::stop() {
+     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+-    if (ioctl(fd_, VIDIOC_STREAMOFF, &type))
++    if (ioctl(get_video_entity()->fd, VIDIOC_STREAMOFF, &type))
+         raise_error("VIDIOC_STREAMOFF failed");
+ }
+ void V4L2DeviceControl::reset() {}
+@@ -79,3 +94,47 @@ void V4L2DeviceControl::reset() {}
+ std::shared_ptr<V4L2Controls> V4L2DeviceControl::get_controls() {
+     return controls_;
+ }
++
++int V4L2DeviceControl::enumerate_entities() {
++    struct media_entity entity;
++    int ret = 0;
++    int id = 0;
++
++    for (id = 0; ; id = entity.desc.id) {
++
++        char target[1024];
++        const std::filesystem::path sys_base = "/sys/dev/char/";
++
++        memset(&entity.desc, 0, sizeof(entity.desc));
++        entity.desc.id = id | MEDIA_ENT_ID_FLAG_NEXT;
++        ret = ioctl(media_fd_, MEDIA_IOC_ENUM_ENTITIES, &entity.desc);
++        if (ret < 0) {
++            if (errno == EINVAL) {
++                break;
++            }
++            perror("MEDIA_IOC_ENUM_ENTITIES");
++            return -1;
++        }
++
++        MV_HAL_LOG_TRACE() << "Found entity: " << entity.desc.name;
++        std::filesystem::path sys_path = sys_base / (std::to_string(entity.desc.v4l.major) + ":" + std::to_string(entity.desc.v4l.minor));
++
++        ret = readlink(sys_path.c_str(), target, sizeof(target));
++        if (ret < 0) {
++            perror("readlink");
++            return -1;
++        }
++        target[ret] = '\0';
++
++        std::filesystem::path dev_path(target);
++        std::filesystem::path devpath = std::filesystem::path("/dev/") / dev_path.filename();
++
++        entity.path = devpath;
++        entity.type = entity.desc.type;
++        entity.fd = open(devpath.c_str(), O_RDWR);
++
++        entities_.push_back(entity);
++    }
++    return 0;
++}
++
+diff --git a/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp b/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp
+index 697b97ad40..553ad991ca 100644
+--- a/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp
++++ b/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp
+@@ -195,7 +195,7 @@ bool V4L2DeviceBuilder::build_device(std::shared_ptr<BoardCommand> cmd, DeviceBu
+             .type = V4L2_BUF_TYPE_VIDEO_CAPTURE
+         };
+ 
+-        if (ioctl(ctrl->get_fd(), VIDIOC_G_FMT, &fmt))
++        if (ioctl(ctrl->get_video_entity()->fd, VIDIOC_G_FMT, &fmt))
+             raise_error("VIDIOC_G_FMT failed");
+ 
+         switch (fmt.fmt.pix.pixelformat) {
+-- 
+2.39.5
+

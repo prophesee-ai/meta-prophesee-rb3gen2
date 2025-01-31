@@ -1,0 +1,123 @@
+From add9de1d895d4eaac0de69b082f7d32a71ddbae7 Mon Sep 17 00:00:00 2001
+From: Ayman Khamouma <akhamouma@prophesee.ai>
+Date: Thu, 17 Oct 2024 17:17:17 +0200
+Subject: [PATCH 09/17] V4L2: Avoid breaking imx636 relative bias behaviour.
+
+---
+ .../devices/v4l2/v4l2_ll_biases.h             |  5 ++--
+ .../src/devices/v4l2/v4l2_device_builder.cpp  |  7 +++++-
+ .../src/devices/v4l2/v4l2_ll_biases.cpp       | 23 +++++++++++++++----
+ 3 files changed, 27 insertions(+), 8 deletions(-)
+
+diff --git a/hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/devices/v4l2/v4l2_ll_biases.h b/hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/devices/v4l2/v4l2_ll_biases.h
+index 61e949aae1..4bdc465d83 100644
+--- a/hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/devices/v4l2/v4l2_ll_biases.h
++++ b/hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/devices/v4l2/v4l2_ll_biases.h
+@@ -27,7 +27,7 @@ class V4L2Controls;
+ 
+ class V4L2LLBiases : public I_LL_Biases {
+ public:
+-    V4L2LLBiases(const DeviceConfig &device_config, std::shared_ptr<V4L2Controls> controls);
++    V4L2LLBiases(const DeviceConfig &device_config, std::shared_ptr<V4L2Controls> controls, bool relative = false);
+ 
+     virtual std::map<std::string, int> get_all_biases() const override;
+ 
+@@ -35,7 +35,7 @@ protected:
+     class V4L2Bias : public LL_Bias_Info {
+     public:
+         V4L2Bias(std::string register_name, const uint8_t &default_val, const bias_settings &bias_conf,
+-                    const std::string &description, const std::string &category);
++                 const std::string &description, const std::string &category);
+ 
+         ~V4L2Bias() = default;
+ 
+@@ -58,6 +58,7 @@ private:
+ 
+     std::shared_ptr<RegisterMap> register_map_;
+     int fd_;
++    bool relative_;
+ };
+ 
+ } // namespace Metavision
+diff --git a/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp b/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp
+index fb5a4a3ce3..85ecf92057 100644
+--- a/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp
++++ b/hal_psee_plugins/src/devices/v4l2/v4l2_device_builder.cpp
+@@ -54,7 +54,12 @@ bool V4L2DeviceBuilder::build_device(std::shared_ptr<BoardCommand> cmd, DeviceBu
+ 
+     if (controls->has("bias")) {
+         MV_HAL_LOG_TRACE() << "Found BIAS controls\n";
+-        device_builder.add_facility(std::make_unique<V4L2LLBiases>(config, controls));
++        auto sensor_info = hw_identification->get_sensor_info();
++        bool relative    = false;
++        if (sensor_info.name_ == "IMX636") {
++            relative = true;
++        }
++        device_builder.add_facility(std::make_unique<V4L2LLBiases>(config, controls, relative));
+     }
+ 
+     if (controls->has("erc")) {
+diff --git a/hal_psee_plugins/src/devices/v4l2/v4l2_ll_biases.cpp b/hal_psee_plugins/src/devices/v4l2/v4l2_ll_biases.cpp
+index 94d4ad7890..4e8f5992bb 100644
+--- a/hal_psee_plugins/src/devices/v4l2/v4l2_ll_biases.cpp
++++ b/hal_psee_plugins/src/devices/v4l2/v4l2_ll_biases.cpp
+@@ -16,8 +16,8 @@
+ 
+ namespace Metavision {
+ 
+-V4L2LLBiases::V4L2LLBiases(const DeviceConfig &device_config, std::shared_ptr<V4L2Controls> controls) :
+-    I_LL_Biases(device_config), controls_(controls) {
++V4L2LLBiases::V4L2LLBiases(const DeviceConfig &device_config, std::shared_ptr<V4L2Controls> controls, bool relative) :
++    I_LL_Biases(device_config), controls_(controls), relative_(relative) {
+     // reset all biases to default values
+     controls_->foreach ([&](V4L2Controls::V4L2Control &ctrl) {
+         auto name = std::string(ctrl.query_.name);
+@@ -35,6 +35,11 @@ bool V4L2LLBiases::set_impl(const std::string &bias_name, int bias_value) {
+     auto ctrl = controls_->get(bias_name);
+     int ret;
+ 
++    if (relative_) {
++        int current_val = get_impl(bias_name);
++        bias_value += ctrl.query_.default_value;
++    }
++
+     ret = ctrl.set_int(bias_value);
+     if (ret != 0) {
+         MV_HAL_LOG_ERROR() << "Failed to set" << bias_name << "Control value to" << bias_value;
+@@ -52,7 +57,7 @@ int V4L2LLBiases::get_impl(const std::string &bias_name) const {
+         throw std::runtime_error("could not get control value");
+ 
+     MV_HAL_LOG_INFO() << bias_name << "Control value:" << *maybe_val;
+-    return *maybe_val;
++    return relative_ ? *maybe_val - ctrl.query_.default_value : *maybe_val;
+ }
+ 
+ bool V4L2LLBiases::get_bias_info_impl(const std::string &bias_name, LL_Bias_Info &bias_info) const {
+@@ -66,14 +71,22 @@ bool V4L2LLBiases::get_bias_info_impl(const std::string &bias_name, LL_Bias_Info
+ std::map<std::string, int> V4L2LLBiases::get_all_biases() const {
+     std::map<std::string, int> biases;
+ 
+-    controls_->foreach ([&biases](V4L2Controls::V4L2Control &ctrl) {
++    controls_->foreach ([&biases, this](V4L2Controls::V4L2Control &ctrl) {
+         auto name = std::string(ctrl.query_.name);
+         // skip non bias controls
+         if (name.find("bias_") != 0) {
+             return 0;
+         }
+ 
+-        biases[ctrl.query_.name] = ctrl.get_int().value_or(0xFFFFFFFF);
++        auto maybe_val = ctrl.get_int();
++        if (!maybe_val.has_value())
++            return 0;
++
++        if (relative_)
++            biases[ctrl.query_.name] = *maybe_val - ctrl.query_.default_value;
++        else
++            biases[ctrl.query_.name] = *maybe_val;
++
+         return 0;
+     });
+ 
+-- 
+2.39.5
+

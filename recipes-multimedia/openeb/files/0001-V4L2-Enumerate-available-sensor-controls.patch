@@ -1,0 +1,609 @@
+From 1c42626c2448068abb24b1800a6a36f39f12a8b4 Mon Sep 17 00:00:00 2001
+From: Ayman Khamouma <akhamouma@prophesee.ai>
+Date: Wed, 2 Oct 2024 12:29:20 +0200
+Subject: [PATCH 01/17] V4L2: Enumerate available sensor controls
+
+Signed-off-by: Ayman Khamouma <akhamouma@prophesee.ai>
+---
+ .../include/boards/v4l2/v4l2_device.h         |   3 +
+ .../psee_hw_layer/boards/v4l2/v4l2_controls.h | 166 +++++++++
+ .../src/boards/v4l2/CMakeLists.txt            |   1 +
+ .../src/boards/v4l2/v4l2_controls.cpp         | 350 ++++++++++++++++++
+ .../src/boards/v4l2/v4l2_device.cpp           |   7 +
+ 5 files changed, 527 insertions(+)
+ create mode 100644 hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/boards/v4l2/v4l2_controls.h
+ create mode 100644 hal_psee_plugins/src/boards/v4l2/v4l2_controls.cpp
+
+diff --git a/hal_psee_plugins/include/boards/v4l2/v4l2_device.h b/hal_psee_plugins/include/boards/v4l2/v4l2_device.h
+index 96f46b2421..f376e1596f 100644
+--- a/hal_psee_plugins/include/boards/v4l2/v4l2_device.h
++++ b/hal_psee_plugins/include/boards/v4l2/v4l2_device.h
+@@ -21,6 +21,7 @@
+ 
+ #include "metavision/hal/facilities/i_camera_synchronization.h"
+ #include "metavision/hal/utils/device_control.h"
++#include "metavision/psee_hw_layer/boards/v4l2/v4l2_controls.h"
+ 
+ namespace Metavision {
+ 
+@@ -31,6 +32,7 @@ using V4l2Capability = struct v4l2_capability;
+ class V4L2DeviceControl : public DeviceControl {
+     V4l2Capability cap_;
+     int fd_ = -1;
++    std::shared_ptr<V4L2Controls> controls_;
+ 
+ public:
+     /* Count the number of bytes received in the buffer. The complexity is log(n) */
+@@ -52,6 +54,7 @@ public:
+     int get_fd() const {
+         return fd_;
+     }
++    std::shared_ptr<V4L2Controls> get_controls();
+ 
+     // DeviceControl
+ public:
+diff --git a/hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/boards/v4l2/v4l2_controls.h b/hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/boards/v4l2/v4l2_controls.h
+new file mode 100644
+index 0000000000..7f1ae8d92a
+--- /dev/null
++++ b/hal_psee_plugins/psee_hw_layer_headers/include/metavision/psee_hw_layer/boards/v4l2/v4l2_controls.h
+@@ -0,0 +1,166 @@
++#ifndef V4L2_CONTROLS_H
++#define V4L2_CONTROLS_H
++
++#include <sys/ioctl.h>
++#include <linux/videodev2.h>
++#include <cstring>
++#include <cstdint>
++#include <optional>
++#include <map>
++#include <string>
++#include <functional>
++#include <cstdint>
++#include <linux/videodev2.h>
++#include "metavision/hal/utils/hal_exception.h"
++#include "metavision/hal/utils/hal_log.h"
++
++
++namespace Metavision {
++
++class V4L2Controls {
++    public:
++    class V4L2Control {
++    public:
++        V4L2Control(int fd);
++        std::string name() const { return query_.name; }
++        std::string strtype() const;
++        int type() const { return query_.type; }
++
++        std::optional<int> get_int(void);
++        std::optional<int64_t> get_int64(void);
++        std::optional<bool> get_bool(void);
++        std::optional<std::string> get_str(void);
++
++        [[nodiscard]] int set_int(int value);
++        [[nodiscard]] int set_int64(std::int64_t value);
++        [[nodiscard]] int set_bool(bool value);
++        [[nodiscard]] int push();
++
++        void reset();
++        bool is_volatile();
++
++        template <typename T>
++        std::optional<T*> get_compound() {
++            // guard
++            if (query_.type < V4L2_CTRL_COMPOUND_TYPES) {
++                MV_HAL_LOG_ERROR() << "Control is not of compound type";
++                return {};
++            }
++
++            if (sizeof(T) != ctrl.size) {
++                MV_HAL_LOG_ERROR() << "Control payload size does not match structure";
++                MV_HAL_LOG_ERROR() << "Control payload size: " << ctrl.size << " structure size: " << sizeof(T);
++
++                return {};
++            }
++
++            refresh();
++
++            // TODO: refresh
++            return {reinterpret_cast<T*>(ctrl.ptr)};
++        }
++
++        template <typename T>
++        [[nodiscard]] int set_compound(T *value) {
++            // guard
++            if (query_.type < V4L2_CTRL_COMPOUND_TYPES) {
++                return -EINVAL;
++            }
++
++            if (sizeof(T) != ctrl.size) {
++                return -EINVAL;
++            }
++
++            memcpy(ctrl.ptr, value, sizeof(T));
++            apply();
++
++            return 0;
++        }
++
++        int apply() {
++            int ret = 0;
++            struct v4l2_ext_controls ctrls;
++            ctrls.which = V4L2_CTRL_ID2WHICH(query_.id);
++            ctrls.count = 1;
++            ctrls.controls = &ctrl;
++            if ((ret = ioctl(fd_, VIDIOC_S_EXT_CTRLS, &ctrls)) < 0) {
++                MV_HAL_LOG_ERROR() << "Failed to update v4l2 control" << query_.name << std::strerror(errno);
++                return -1;
++            }
++
++            return 0;
++        }
++
++        int refresh() {
++            if (query_.type == V4L2_CTRL_TYPE_BUTTON) {
++                return 0;
++            }
++
++            struct v4l2_ext_controls ctrls = {0};
++            ctrls.which = V4L2_CTRL_ID2WHICH(query_.id);
++            ctrls.count = 1;
++            ctrls.controls = &ctrl;
++            return ioctl(fd_, VIDIOC_G_EXT_CTRLS, &ctrls);
++        }
++
++        template <typename T>
++        std::optional<T> get_min() {
++            // only applicable to integer types
++            if (query_.type != V4L2_CTRL_TYPE_INTEGER || query_.type != V4L2_CTRL_TYPE_INTEGER64) {
++                MV_HAL_LOG_ERROR() << "Control is not of integer type";
++                return {};
++            }
++
++            if (sizeof(T) != ctrl.size) {
++                MV_HAL_LOG_ERROR() << "Control payload size does not match structure";
++                return {};
++            }
++
++            return *reinterpret_cast<T*>(&query_.minimum);
++        }
++
++        template <typename T>
++        std::optional<T> get_max() {
++            if (query_.type != V4L2_CTRL_TYPE_INTEGER || query_.type != V4L2_CTRL_TYPE_INTEGER64) {
++                MV_HAL_LOG_ERROR() << "Control is not of integer type";
++                return {};
++            }
++
++            if (sizeof(T) != ctrl.size) {
++                MV_HAL_LOG_ERROR() << "Control payload size does not match structure";
++                return {};
++            }
++
++            return *reinterpret_cast<T*>(&query_.maximum);
++        }
++
++        v4l2_ext_control ctrl;
++        v4l2_query_ext_ctrl query_;
++            
++    private:
++        int fd_;
++    };
++
++    V4L2Controls(int fd);
++
++    void enumerate();
++
++    V4L2Control& get(const std::string &name);
++    bool has(const std::string &name) const;
++
++    void foreach(std::function<int(V4L2Control &)> f);
++private:
++    // controls cache (map)
++    std::map<std::string, V4L2Control> control_cache_;
++    std::map<std::string, bool> dirt_map_;
++    struct v4l2_query_ext_ctrl query_;
++
++    int query();
++
++    int get_next_control(V4L2Control &ctrl);
++
++    int fd_;
++};
++} // namespace Metavision
++
++#endif // V4L2_CONTROLS_H
+diff --git a/hal_psee_plugins/src/boards/v4l2/CMakeLists.txt b/hal_psee_plugins/src/boards/v4l2/CMakeLists.txt
+index 8e29b3974d..ef05a2e4af 100644
+--- a/hal_psee_plugins/src/boards/v4l2/CMakeLists.txt
++++ b/hal_psee_plugins/src/boards/v4l2/CMakeLists.txt
+@@ -22,6 +22,7 @@ target_sources(metavision_psee_hw_layer_obj PRIVATE
+     ${CMAKE_CURRENT_SOURCE_DIR}/v4l2_data_transfer.cpp
+     ${CMAKE_CURRENT_SOURCE_DIR}/v4l2_mmap_allocator.cpp
+     ${CMAKE_CURRENT_SOURCE_DIR}/v4l2_dmabuf_allocator.cpp
++    ${CMAKE_CURRENT_SOURCE_DIR}/v4l2_controls.cpp
+     ${CMAKE_CURRENT_SOURCE_DIR}/v4l2_device.cpp
+     ${CMAKE_CURRENT_SOURCE_DIR}/v4l2_board_command.cpp
+     ${CMAKE_CURRENT_SOURCE_DIR}/v4l2_hardware_identification.cpp
+diff --git a/hal_psee_plugins/src/boards/v4l2/v4l2_controls.cpp b/hal_psee_plugins/src/boards/v4l2/v4l2_controls.cpp
+new file mode 100644
+index 0000000000..6014a292ad
+--- /dev/null
++++ b/hal_psee_plugins/src/boards/v4l2/v4l2_controls.cpp
+@@ -0,0 +1,350 @@
++#include <cstring>
++#include <optional>
++#include <map>
++#include <string>
++#include <functional>
++#include <cerrno>
++#include <linux/videodev2.h>
++#include <sys/ioctl.h>
++#include "metavision/hal/utils/hal_exception.h"
++#include "metavision/hal/utils/hal_log.h"
++#include "metavision/psee_hw_layer/boards/v4l2/v4l2_controls.h"
++
++namespace Metavision {
++V4L2Controls::V4L2Control::V4L2Control(int fd) : fd_(fd) {
++    memset(&ctrl, 0, sizeof(struct v4l2_ext_control));
++}
++
++int V4L2Controls::V4L2Control::push() {
++    if (type() != V4L2_CTRL_TYPE_BUTTON) {
++        throw std::runtime_error("Only button controls can be pushed");
++    }
++
++    return apply();
++}
++std::optional<int> V4L2Controls::V4L2Control::get_int(void) {
++    if (query_.flags & V4L2_CTRL_FLAG_WRITE_ONLY) {
++        return {};
++    }
++
++    switch(query_.type) {
++        case V4L2_CTRL_TYPE_INTEGER:
++            return std::optional<int>(static_cast<int>(ctrl.value));
++        default:
++            return {};
++    }
++}
++
++std::optional<int64_t> V4L2Controls::V4L2Control::get_int64(void) {
++    if (query_.flags & V4L2_CTRL_FLAG_WRITE_ONLY) {
++        return {};
++    }
++
++    switch(query_.type) {
++        case V4L2_CTRL_TYPE_INTEGER:
++            return std::optional<int64_t>(static_cast<int64_t>(ctrl.value));
++        case V4L2_CTRL_TYPE_INTEGER64:
++            return std::optional<int64_t>(static_cast<int64_t>(ctrl.value64));
++        default:
++            return {};
++    }
++}
++
++std::optional<bool> V4L2Controls::V4L2Control::get_bool(void) {
++    if (query_.flags & V4L2_CTRL_FLAG_WRITE_ONLY) {
++        return {};
++    }
++
++    switch(query_.type) {
++        case V4L2_CTRL_TYPE_BOOLEAN:
++            return std::optional<bool>(static_cast<bool>(ctrl.value));
++        default:
++            return {};
++    }
++}
++
++std::optional<std::string> V4L2Controls::V4L2Control::get_str(void) {
++    if (query_.flags & V4L2_CTRL_FLAG_WRITE_ONLY) {
++        return {};
++    }
++
++    switch(query_.type) {
++        case V4L2_CTRL_TYPE_STRING:
++            return std::string(ctrl.string);
++        default:
++            return {};
++    }
++}
++
++int V4L2Controls::V4L2Control::set_int(int value) {
++    // guards
++    if (query_.flags & V4L2_CTRL_FLAG_WRITE_ONLY)
++        return -EPERM;
++
++    if (query_.type != V4L2_CTRL_TYPE_INTEGER)
++        return -EINVAL;
++
++    // check within range
++    if (value < query_.minimum || value > query_.maximum)
++        return -EINVAL;
++
++    ctrl.value = value;
++
++    apply();
++    return 0;
++}
++
++int V4L2Controls::V4L2Control::set_int64(std::int64_t value) {
++    if (query_.flags & V4L2_CTRL_FLAG_WRITE_ONLY)
++        return -EPERM;
++
++    if (query_.type != V4L2_CTRL_TYPE_INTEGER64)
++        return -EINVAL;
++
++    // check within range
++    if (value < query_.minimum || value > query_.maximum)
++        return -EINVAL;
++
++    ctrl.value64 = value;
++
++    apply();
++    return 0;
++}
++
++int V4L2Controls::V4L2Control::set_bool(bool value) {
++    if (query_.flags & V4L2_CTRL_FLAG_WRITE_ONLY)
++        return -EPERM;
++
++    if (query_.type != V4L2_CTRL_TYPE_BOOLEAN)
++        return -EINVAL;
++
++    ctrl.value = value;
++    return apply();
++
++}
++
++std::string V4L2Controls::V4L2Control::strtype() const {
++    switch (type()) {
++        case V4L2_CTRL_TYPE_INTEGER:
++            return "integer";
++        case V4L2_CTRL_TYPE_BOOLEAN:
++            return "boolean";
++        case V4L2_CTRL_TYPE_MENU:
++            return "menu";
++        case V4L2_CTRL_TYPE_BUTTON:
++            return "button";
++        case V4L2_CTRL_TYPE_INTEGER64:
++            return "integer64";
++        case V4L2_CTRL_TYPE_CTRL_CLASS:
++            return "class";
++        case V4L2_CTRL_TYPE_STRING:
++            return "string";
++        case V4L2_CTRL_TYPE_BITMASK:
++            return "bitmask";
++        case V4L2_CTRL_TYPE_INTEGER_MENU:
++            return "integer_menu";
++        default:
++            return "unknown";
++    }
++}
++
++bool V4L2Controls::V4L2Control::is_volatile() {
++    return !!(query_.flags & V4L2_CTRL_FLAG_VOLATILE);
++}
++
++void V4L2Controls::V4L2Control::reset() {
++    int ret;
++
++    MV_HAL_LOG_TRACE() << "Resetting control" << name();
++    switch (query_.type) {
++        case V4L2_CTRL_TYPE_INTEGER:
++            // default value should not change during runtime, no need to refresh the control.
++            ret = set_int(query_.default_value);
++            if (ret) {
++                MV_HAL_LOG_ERROR() << "Failed to reset" << name() << "to default value" << query_.default_value;
++            }
++            break;
++
++        case V4L2_CTRL_TYPE_BUTTON:
++            break;
++
++        default:
++            struct v4l2_ext_controls ctrls = {};
++            // get default value
++            ctrls.which = V4L2_CTRL_WHICH_DEF_VAL;
++            ctrls.count = 1;
++            ctrls.controls = &ctrl;
++
++            if (ioctl(fd_, VIDIOC_G_EXT_CTRLS, &ctrls)) {
++                MV_HAL_LOG_ERROR() << "reset: error getting ext_ctrl" << query_.name << std::strerror(errno);
++                return;
++            }
++
++            // apply as current
++            ctrls.which = V4L2_CTRL_ID2WHICH(query_.id);
++            if (ioctl(fd_, VIDIOC_S_EXT_CTRLS, &ctrls)) {
++                MV_HAL_LOG_ERROR() << "reset: error setting ext_ctrl" << query_.name << std::strerror(errno);
++                return;
++            }
++
++            break;
++    }
++}
++
++V4L2Controls::V4L2Controls(int fd) : fd_(fd) {
++    memset(&query_, 0, sizeof(query_));
++    enumerate();
++}
++
++void V4L2Controls::enumerate() {
++    V4L2Controls::V4L2Control ctrl(fd_);
++
++    memset(&query_, 0, sizeof(query_));
++    while ((get_next_control(ctrl) == 0)) {
++        MV_HAL_LOG_TRACE() << "Control" << query_.name << "found";
++        control_cache_.emplace(query_.name, ctrl);
++    }
++
++    // notify if not controls have been found:
++    if (control_cache_.empty()) {
++        MV_HAL_LOG_WARNING() << "No controls found";
++    }
++}
++
++V4L2Controls::V4L2Control &V4L2Controls::get(const std::string &name) {
++    int ret = 0;
++    V4L2Controls::V4L2Control &control = control_cache_.at(name);
++    ret = control.refresh();
++    if (ret) {
++        auto strerr = std::strerror(errno);
++        throw std::runtime_error("Failed to refresh control " + name + " (" + strerr + "), ret = " + std::to_string(ret));
++    }
++
++    return control;
++}
++
++bool V4L2Controls::has(const std::string &name) const {
++    for (const auto &p : control_cache_) {
++        if (p.first.find(name) == 0) {
++            return true;
++        }
++    }
++
++    return false;
++}
++
++void V4L2Controls::foreach(std::function<int(V4L2Controls::V4L2Control &)> f) {
++    for (auto &[name, ctrl] : control_cache_) {
++        f(ctrl);
++    }
++}
++
++int V4L2Controls::query() {
++    struct v4l2_queryctrl qc;
++    int rc;
++
++    query_.id |= V4L2_CTRL_FLAG_NEXT_COMPOUND | V4L2_CTRL_FLAG_NEXT_CTRL;
++
++    rc = ioctl(fd_, VIDIOC_QUERY_EXT_CTRL, &query_);
++    if (rc != ENOTTY) {
++        return rc;
++    }
++
++    qc.id = query_.id;
++    rc = ioctl(fd_, VIDIOC_QUERYCTRL, &qc);
++    if (rc == 0) {
++        query_.type = qc.type;
++        memcpy(query_.name, qc.name, sizeof(query_.name));
++        query_.minimum = qc.minimum;
++        if (qc.type == V4L2_CTRL_TYPE_BITMASK) {
++            query_.maximum = static_cast<__u32>(qc.maximum);
++            query_.default_value = static_cast<__u32>(qc.default_value);
++        } else {
++            query_.maximum = qc.maximum;
++            query_.default_value = qc.default_value;
++        }
++        query_.step = qc.step;
++        query_.flags = qc.flags;
++        query_.elems = 1;
++        query_.nr_of_dims = 0;
++        memset(query_.dims, 0, sizeof(query_.dims));
++        switch (query_.type) {
++            case V4L2_CTRL_TYPE_INTEGER64:
++                query_.elem_size = sizeof(__s64);
++                break;
++            case V4L2_CTRL_TYPE_STRING:
++                query_.elem_size = qc.maximum + 1;
++                query_.flags |= V4L2_CTRL_FLAG_HAS_PAYLOAD;
++                break;
++            default:
++                query_.elem_size = sizeof(__s32);
++                break;
++        }
++        memset(query_.reserved, 0, sizeof(query_.reserved));
++    }
++
++    query_.id = qc.id;
++    return rc;
++}
++
++int V4L2Controls::get_next_control(V4L2Controls::V4L2Control &ctrl) {
++    struct v4l2_ext_controls ctrls;
++    int ret;
++
++    memset(&ctrls, 0, sizeof(ctrls));
++    memset(&ctrl.ctrl, 0, sizeof(ctrl.ctrl));
++
++    do {
++        ret = query();
++    } while (ret == 0 && (query_.flags & V4L2_CTRL_FLAG_DISABLED || query_.type == V4L2_CTRL_TYPE_CTRL_CLASS));
++
++    if (ret)
++        return ret;
++
++    // TODO: Check if needed HERE or BEFORE loop ??
++    // save the query used to get this control
++    memcpy(&ctrl.query_, &query_, sizeof(query_));
++
++    ctrl.ctrl.id = query_.id;
++    ctrls.which = V4L2_CTRL_ID2WHICH(query_.id);
++    ctrls.count = 1;
++    ctrls.controls = &ctrl.ctrl;
++
++    if (query_.type == V4L2_CTRL_TYPE_INTEGER64 ||
++        query_.type == V4L2_CTRL_TYPE_INTEGER ||
++        query_.type == V4L2_CTRL_TYPE_STRING ||
++        query_.nr_of_dims ||
++        query_.type >= V4L2_CTRL_COMPOUND_TYPES ||
++        (V4L2_CTRL_ID2WHICH(query_.id) != V4L2_CTRL_CLASS_USER &&
++        query_.id < V4L2_CID_PRIVATE_BASE)) {
++
++        if (query_.flags & V4L2_CTRL_FLAG_HAS_PAYLOAD) {
++            ctrl.ctrl.size = query_.elems * query_.elem_size;
++            ctrl.ctrl.ptr = calloc(1, ctrl.ctrl.size);
++        } else {
++            ctrl.ctrl.ptr = NULL;
++        }
++
++        if (ioctl(fd_, VIDIOC_G_EXT_CTRLS, &ctrls)) {
++            MV_HAL_LOG_ERROR() << "error getting ext_ctrl" << ctrl.query_.name << std::strerror(errno);
++            return -1;
++        }
++
++    } else {
++        struct v4l2_control basic_ctrl;
++        basic_ctrl.id = query_.id;
++        if (query_.type != V4L2_CTRL_TYPE_BUTTON) {
++            if (ioctl(fd_, VIDIOC_G_CTRL, &basic_ctrl)) {
++                MV_HAL_LOG_ERROR() << "error getting ctrl" << query_.name << std::strerror(errno);
++                return -1;
++            }
++
++            ctrl.ctrl.value = basic_ctrl.value;
++            ctrl.ctrl.ptr = &ctrl.ctrl.value;
++            ctrl.ctrl.size = sizeof(ctrl.ctrl.value);
++        }
++    }
++
++    return ret;
++}
++} // namespace Metavision
+diff --git a/hal_psee_plugins/src/boards/v4l2/v4l2_device.cpp b/hal_psee_plugins/src/boards/v4l2/v4l2_device.cpp
+index 051ba5de58..a92bae2003 100644
+--- a/hal_psee_plugins/src/boards/v4l2/v4l2_device.cpp
++++ b/hal_psee_plugins/src/boards/v4l2/v4l2_device.cpp
+@@ -54,6 +54,9 @@ V4L2DeviceControl::V4L2DeviceControl(const std::string &dev_name) {
+     if (!(cap_.capabilities & V4L2_CAP_STREAMING))
+         throw std::runtime_error(dev_name + " does not support streaming i/o");
+ 
++    // only expose sensor controls for now
++    int sensor_fd = open(getenv("V4L2_SENSOR_PATH"), O_RDWR | O_NONBLOCK, 0);
++    controls_ = std::make_shared<V4L2Controls>(sensor_fd);
+     // Note: this code expects the V4L2 device to be configured to output a supported format
+ }
+ 
+@@ -72,3 +75,7 @@ void V4L2DeviceControl::stop() {
+         raise_error("VIDIOC_STREAMOFF failed");
+ }
+ void V4L2DeviceControl::reset() {}
++
++std::shared_ptr<V4L2Controls> V4L2DeviceControl::get_controls() {
++    return controls_;
++}
+-- 
+2.39.5
+

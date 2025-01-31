@@ -1,0 +1,79 @@
+From 16a7a96766dc092d83a738aa20992fce8aac82a5 Mon Sep 17 00:00:00 2001
+From: Christian Dreher <cdreher@prophesee.ai>
+Date: Thu, 6 Feb 2025 19:05:11 +0100
+Subject: [PATCH 13/17] Rely on GLEW for OpenGLx stuff
+
+---
+ .../metavision/sdk/ui/utils/opengl_api.h      | 19 ++++++-------------
+ sdk/modules/ui/cpp/lib/CMakeLists.txt         |  4 ++--
+ 2 files changed, 8 insertions(+), 15 deletions(-)
+
+diff --git a/sdk/modules/ui/cpp/include/metavision/sdk/ui/utils/opengl_api.h b/sdk/modules/ui/cpp/include/metavision/sdk/ui/utils/opengl_api.h
+index a59d204178..91ca7a8d8b 100644
+--- a/sdk/modules/ui/cpp/include/metavision/sdk/ui/utils/opengl_api.h
++++ b/sdk/modules/ui/cpp/include/metavision/sdk/ui/utils/opengl_api.h
+@@ -12,26 +12,19 @@
+ #ifndef METAVISION_SDK_UI_UTILS_OPENGL_API
+ #define METAVISION_SDK_UI_UTILS_OPENGL_API
+ 
+-#ifdef _USE_OPENGL_ES3_
+-#include <GLES3/gl3.h>
+-#elif defined(__APPLE__) && !defined(__linux__)
++#if defined(__APPLE__) && !defined(__linux__)
+ #define GL_SILENCE_DEPRECATION
+ #include <OpenGL/gl3.h>
++static inline int glewInit(void) {
++    return GLEW_OK;
++}
+ #else
++#define GLEW_NO_GLU
+ #include <GL/glew.h>
+-#include <GL/gl.h>
++#define GLFW_INCLUDE_NONE
+ #endif
+ 
+ // GLFW needs to be included after OpenGL
+ #include <GLFW/glfw3.h>
+ 
+-// While we keep support for OpenGL, we need to provide a
+-// dummy implementation for Glew init function
+-#ifndef GLEW_OK
+-#define GLEW_OK 0
+-inline int glewInit(void) {
+-    return GLEW_OK;
+-}
+-#endif
+-
+ #endif // METAVISION_SDK_UI_UTILS_OPENGL_API
+diff --git a/sdk/modules/ui/cpp/lib/CMakeLists.txt b/sdk/modules/ui/cpp/lib/CMakeLists.txt
+index b96ed2d8b6..c8a9ead961 100644
+--- a/sdk/modules/ui/cpp/lib/CMakeLists.txt
++++ b/sdk/modules/ui/cpp/lib/CMakeLists.txt
+@@ -9,7 +9,7 @@
+ 
+ # OpenGL
+ set(OpenGL_GL_PREFERENCE GLVND)
+-find_package(OpenGL REQUIRED)
++find_package(OpenGL)
+ 
+ # GLEW
+ find_package(GLEW REQUIRED)
+@@ -33,6 +33,7 @@ target_link_libraries(metavision_sdk_ui
+     PUBLIC
+         opencv_core
+         glfw
++        GLEW::GLEW
+ )
+ 
+ option(USE_OPENGL_ES3 "Use OpenGL ES3 instead of OpenGl Desktop (usefull on embedded devices)" OFF)
+@@ -66,7 +67,6 @@ else()
+     target_link_libraries(metavision_sdk_ui 
+         PUBLIC 
+             OpenGL::GL 
+-            GLEW::GLEW
+     )
+ endif(USE_OPENGL_ES3)
+ 
+-- 
+2.39.5
+

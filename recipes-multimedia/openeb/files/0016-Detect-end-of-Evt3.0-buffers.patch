@@ -1,0 +1,44 @@
+From 6f8c480cf08315904ec130caf7a1ed6f2def41cb Mon Sep 17 00:00:00 2001
+From: Christian Dreher <cdreher@prophesee.ai>
+Date: Tue, 11 Feb 2025 17:45:06 +0100
+Subject: [PATCH 16/17] Detect end of Evt3.0 buffers
+
+---
+ hal/cpp/include/metavision/hal/decoders/evt3/evt3_decoder.h | 6 ++++++
+ .../include/metavision/hal/decoders/evt3/evt3_event_types.h | 3 ++-
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/hal/cpp/include/metavision/hal/decoders/evt3/evt3_decoder.h b/hal/cpp/include/metavision/hal/decoders/evt3/evt3_decoder.h
+index 2bd5346f12..c3bb9d321e 100644
+--- a/hal/cpp/include/metavision/hal/decoders/evt3/evt3_decoder.h
++++ b/hal/cpp/include/metavision/hal/decoders/evt3/evt3_decoder.h
+@@ -254,6 +254,12 @@ private:
+                     continue;
+                 }
+ 
++                if (master_type == static_cast<uint16_t>(Evt3MasterEventTypes::MASTER_END_OF_FRAME)) {
++                    // End of valid data, skip to the next buffer
++                    cur_raw_ev = raw_ev_end;
++                    return 0;
++                }
++
+                 constexpr uint32_t evt_size = 1 + sizeof(Evt3Raw::Event_Continue12_12_4) / sizeof(RawEvent);
+                 if (cur_raw_ev + evt_size > raw_ev_end) {
+                     // Not enough raw data to decode potential continue events. Stop decoding this buffer and return the
+diff --git a/hal/cpp/include/metavision/hal/decoders/evt3/evt3_event_types.h b/hal/cpp/include/metavision/hal/decoders/evt3/evt3_event_types.h
+index 4addf71bde..c477d2f559 100644
+--- a/hal/cpp/include/metavision/hal/decoders/evt3/evt3_event_types.h
++++ b/hal/cpp/include/metavision/hal/decoders/evt3/evt3_event_types.h
+@@ -121,7 +121,8 @@ enum class Evt3EventTypes_4bits : EventTypesUnderlying_t {
+ 
+ enum class Evt3MasterEventTypes : uint16_t {
+     MASTER_IN_CD_EVENT_COUNT           = 0x014,
+-    MASTER_RATE_CONTROL_CD_EVENT_COUNT = 0x016
++    MASTER_RATE_CONTROL_CD_EVENT_COUNT = 0x016,
++    MASTER_END_OF_FRAME                = 0x019,
+ };
+ 
+ } // namespace Metavision
+-- 
+2.39.5
+

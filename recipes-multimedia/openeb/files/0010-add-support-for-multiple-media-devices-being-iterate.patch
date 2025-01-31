@@ -1,0 +1,32 @@
+From b621338bd654febb5e9ad15a32f41d36b8d43998 Mon Sep 17 00:00:00 2001
+From: sehrle <sehrle@prophesee.ai>
+Date: Wed, 8 Jan 2025 16:09:34 +0100
+Subject: [PATCH 10/17] add support for multiple media devices being iterated
+ without exception.
+
+---
+ .../src/boards/v4l2/v4l2_camera_discovery.cpp             | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/hal_psee_plugins/src/boards/v4l2/v4l2_camera_discovery.cpp b/hal_psee_plugins/src/boards/v4l2/v4l2_camera_discovery.cpp
+index 20e8db1197..0116cdfec1 100644
+--- a/hal_psee_plugins/src/boards/v4l2/v4l2_camera_discovery.cpp
++++ b/hal_psee_plugins/src/boards/v4l2/v4l2_camera_discovery.cpp
+@@ -43,7 +43,13 @@ namespace Metavision {
+ V4l2CameraDiscovery::V4l2CameraDiscovery() {
+     for (const auto &entry : std::filesystem::directory_iterator("/dev/")) {
+         if (entry.path().string().find("/dev/media") == 0) {
+-            devices_.emplace_back(std::make_shared<V4L2BoardCommand>(entry.path()));
++            try {
++                devices_.emplace_back(std::make_shared<V4L2BoardCommand>(entry.path()));
++            } catch (const std::exception &e) {
++                // This does not have to crash because only valid devices are added.
++                MV_LOG_TRACE() << "Discarding " << entry.path().string();
++                MV_LOG_TRACE() << e.what();
++            }
+         }
+     }
+ }
+-- 
+2.39.5
+

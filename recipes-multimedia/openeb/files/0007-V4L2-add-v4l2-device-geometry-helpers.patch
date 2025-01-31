@@ -1,0 +1,39 @@
+From f8e9f17c0f08caddd741fc9192852110e0a23910 Mon Sep 17 00:00:00 2001
+From: Ayman Khamouma <akhamouma@prophesee.ai>
+Date: Sat, 12 Oct 2024 15:26:01 +0200
+Subject: [PATCH 07/17] V4L2: add v4l2 device geometry helpers
+
+---
+ .../include/boards/v4l2/v4l2_device.h            | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/hal_psee_plugins/include/boards/v4l2/v4l2_device.h b/hal_psee_plugins/include/boards/v4l2/v4l2_device.h
+index 5d2425c192..c4af02595e 100644
+--- a/hal_psee_plugins/include/boards/v4l2/v4l2_device.h
++++ b/hal_psee_plugins/include/boards/v4l2/v4l2_device.h
+@@ -138,6 +138,22 @@ public:
+         rect = sel.r;
+     }
+ 
++    int get_height() const {
++        struct v4l2_format fmt{.type = V4L2_BUF_TYPE_VIDEO_CAPTURE};
++
++        if (ioctl(get_video_entity()->fd, VIDIOC_G_FMT, &fmt))
++            raise_error("VIDIOC_G_FMT failed");
++
++        return fmt.fmt.pix.height;
++    };
++
++    int get_width() const {
++        struct v4l2_format fmt{.type = V4L2_BUF_TYPE_VIDEO_CAPTURE};
++        if (ioctl(get_video_entity()->fd, VIDIOC_G_FMT, &fmt))
++            raise_error("VIDIOC_G_FMT failed");
++        return fmt.fmt.pix.width;
++    };
++
+     int enumerate_entities();
+     std::shared_ptr<V4L2Controls> get_controls();
+ 
+-- 
+2.39.5
+

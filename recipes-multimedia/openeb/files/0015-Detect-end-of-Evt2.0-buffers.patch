@@ -1,0 +1,41 @@
+From 33b15a6cf5d0174c5078687c5aa0c04d1b507604 Mon Sep 17 00:00:00 2001
+From: Christian Dreher <cdreher@prophesee.ai>
+Date: Tue, 11 Feb 2025 17:33:23 +0100
+Subject: [PATCH 15/17] Detect end of Evt2.0 buffers
+
+---
+ hal/cpp/include/metavision/hal/decoders/evt2/evt2_decoder.h  | 5 +++++
+ .../include/metavision/hal/decoders/evt2/evt2_event_types.h  | 1 +
+ 2 files changed, 6 insertions(+)
+
+diff --git a/hal/cpp/include/metavision/hal/decoders/evt2/evt2_decoder.h b/hal/cpp/include/metavision/hal/decoders/evt2/evt2_decoder.h
+index 4c933efcb4..e60b871b43 100644
+--- a/hal/cpp/include/metavision/hal/decoders/evt2/evt2_decoder.h
++++ b/hal/cpp/include/metavision/hal/decoders/evt2/evt2_decoder.h
+@@ -166,6 +166,11 @@ private:
+                     last_timestamp_     = base_time_ + ev_monitor->timestamp;
+                     last_timestamp_set_ = true;
+ 
++                    if (ev_monitor->subtype == EVT2EventMasterEventTypes::USERDEFINED_END_OF_FRAME) {
++                        // End of valid data, skip to the next buffer
++                        return;
++                    }
++
+                     if (ev + 1 != raw_ev_end) {
+                         const EVT2Continued *ev_cont = nullptr;
+                         if ((ev + 1)->type == static_cast<EventTypesUnderlying_t>(EVT2EventTypes::CONTINUED)) {
+diff --git a/hal/cpp/include/metavision/hal/decoders/evt2/evt2_event_types.h b/hal/cpp/include/metavision/hal/decoders/evt2/evt2_event_types.h
+index 5c54fcbd37..1ff47a51b5 100644
+--- a/hal/cpp/include/metavision/hal/decoders/evt2/evt2_event_types.h
++++ b/hal/cpp/include/metavision/hal/decoders/evt2/evt2_event_types.h
+@@ -185,6 +185,7 @@ static_assert(sizeof(EVT2RawEvent) == 4,
+ enum EVT2EventMasterEventTypes : uint16_t {
+     MASTER_IN_CD_EVENT_COUNT           = 0x0014,
+     MASTER_RATE_CONTROL_CD_EVENT_COUNT = 0x0016,
++    USERDEFINED_END_OF_FRAME           = 0xE019,
+ };
+ 
+ } // namespace Metavision
+-- 
+2.39.5
+
