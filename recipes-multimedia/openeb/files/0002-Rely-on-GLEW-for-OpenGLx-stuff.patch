@@ -1,7 +1,7 @@
-From 16a7a96766dc092d83a738aa20992fce8aac82a5 Mon Sep 17 00:00:00 2001
+From faf77ad6da886c4f2790efc90278bf7055cf1647 Mon Sep 17 00:00:00 2001
 From: Christian Dreher <cdreher@prophesee.ai>
 Date: Thu, 6 Feb 2025 19:05:11 +0100
-Subject: [PATCH 13/17] Rely on GLEW for OpenGLx stuff
+Subject: [PATCH 2/6] Rely on GLEW for OpenGLx stuff
 
 ---
  .../metavision/sdk/ui/utils/opengl_api.h      | 19 ++++++-------------

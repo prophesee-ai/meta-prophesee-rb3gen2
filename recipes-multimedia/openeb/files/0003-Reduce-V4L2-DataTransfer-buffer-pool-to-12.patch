@@ -1,7 +1,7 @@
-From 6a97ee4191c83294d8785f08056c2b3a395bfb6a Mon Sep 17 00:00:00 2001
+From d60078554b7b1e8086ce76d95be1779676e8c699 Mon Sep 17 00:00:00 2001
 From: Christian Dreher <cdreher@prophesee.ai>
 Date: Wed, 19 Feb 2025 13:37:42 +0100
-Subject: [PATCH 18/18] Reduce V4L2 DataTransfer buffer pool to 12
+Subject: [PATCH 3/6] Reduce V4L2 DataTransfer buffer pool to 12
 
 The RB3Gen2 default CMA size is too small to allocate 32 buffers,
 but V4L2 tends to work better with a DMA buffer heap.
@@ -16,10 +16,10 @@ buffers should be enough for me, and this fix is quicker.
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/hal_psee_plugins/include/boards/v4l2/v4l2_data_transfer.h b/hal_psee_plugins/include/boards/v4l2/v4l2_data_transfer.h
-index c8ec10ebb4..6019b49221 100644
+index cc4a477124..37e4df1219 100644
 --- a/hal_psee_plugins/include/boards/v4l2/v4l2_data_transfer.h
 +++ b/hal_psee_plugins/include/boards/v4l2/v4l2_data_transfer.h
-@@ -40,7 +40,7 @@ public:
+@@ -41,7 +41,7 @@ public:
      ~V4l2DataTransfer();
  
  private:

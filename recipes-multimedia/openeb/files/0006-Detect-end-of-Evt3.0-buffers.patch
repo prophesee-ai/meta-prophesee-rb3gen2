@@ -1,7 +1,7 @@
-From 6f8c480cf08315904ec130caf7a1ed6f2def41cb Mon Sep 17 00:00:00 2001
+From c55bae761a86b6fb938408077e61c51962611674 Mon Sep 17 00:00:00 2001
 From: Christian Dreher <cdreher@prophesee.ai>
 Date: Tue, 11 Feb 2025 17:45:06 +0100
-Subject: [PATCH 16/17] Detect end of Evt3.0 buffers
+Subject: [PATCH 6/6] Detect end of Evt3.0 buffers
 
 ---
  hal/cpp/include/metavision/hal/decoders/evt3/evt3_decoder.h | 6 ++++++
