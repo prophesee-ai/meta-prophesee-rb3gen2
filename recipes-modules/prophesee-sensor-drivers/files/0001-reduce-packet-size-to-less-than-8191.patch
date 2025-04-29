@@ -1,14 +1,16 @@
-From 1c04a3a5e4d54d36622572f2e1e341790a669aaa Mon Sep 17 00:00:00 2001
+From 921d6d444e8d0a0c73bafa7eabe16f68cee3f022 Mon Sep 17 00:00:00 2001
 From: Christian Dreher <cdreher@prophesee.ai>
-Date: Fri, 17 Jan 2025 19:48:43 +0100
-Subject: [PATCH 2/2] reduce packet size to less than 8191
+Date: Mon, 28 Apr 2025 18:20:48 +0200
+Subject: [PATCH 1/4] reduce packet size to less than 8191
 
+# Conflicts:
+#	imx636.c
 ---
- imx636.c | 8 +++++---
- 1 file changed, 5 insertions(+), 3 deletions(-)
+ imx636.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
 
 diff --git a/imx636.c b/imx636.c
-index 200e230..6e35710 100644
+index 324d9c9..8a05d47 100644
 --- a/imx636.c
 +++ b/imx636.c
 @@ -24,9 +24,8 @@
@@ -32,14 +34,16 @@ index 200e230..6e35710 100644
  #define IMX636_MIPI_PL_RG_1 (MIPI_CSI_BASE + 0x064)
  #define IMX636_MIPI_PL_RG_CKOUTEN BIT(1)
  
-@@ -967,6 +968,7 @@ static int imx636_reconfigure_csi2_freq(struct imx636 *imx636)
+@@ -1042,6 +1043,9 @@ static int imx636_reconfigure_csi2(struct imx636 *imx636)
+ 		IMX636_MIPI_RG_BIASEN | IMX636_MIPI_RG_LPREGEN));
+ 	usleep_range(200, 300);
  
- 	/* Only close packet when MIPI_PACKET_SIZE is reached */
- 	RET_ON(imx636_clear_reg(imx636, IMX636_MIPI_CONTROL, IMX636_MIPI_PACKET_TIMEOUT_ENABLE));
++	/* Set the requested packet length */
 +	RET_ON(imx636_write_reg(imx636, IMX636_MIPI_PACKET_SIZE, CSI2_PACKET_SIZE));
- 
- 	/* Power down CSI-2 and D-PHY */
- 	RET_ON(imx636_write_reg(imx636, IMX636_MIPI_STREAM, 0));
++
+ 	if (imx636->quirk_fixed_packet_size) {
+ 		/* Only close packet when MIPI_PACKET_SIZE is reached */
+ 		RET_ON(imx636_clear_reg(imx636, IMX636_MIPI_CONTROL,
 -- 
-2.39.5
+2.25.1
 
