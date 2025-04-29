@@ -1,7 +1,7 @@
-From 686d224ba80c7b9e83e5d97072e1c9a5a674dcac Mon Sep 17 00:00:00 2001
+From 046638e12513310555e02f8245f684d0d69bf2c7 Mon Sep 17 00:00:00 2001
 From: Christian Dreher <cdreher@prophesee.ai>
 Date: Fri, 17 Jan 2025 19:55:31 +0100
-Subject: [PATCH] Let Prophesee event formats pass through CAMSS
+Subject: [PATCH 5/6] Let Prophesee event formats pass through CAMSS
 
 ---
  .../media/platform/qcom/camss/camss-csid.c    | 84 +++++++++++++++++++
@@ -232,5 +232,5 @@ index 5b08ba823d42..457a1936fd37 100644
  
  static const struct camss_format_info formats_pix_8x16[] = {
 -- 
-2.39.5
+2.25.1
 

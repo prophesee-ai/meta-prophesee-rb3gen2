@@ -1,7 +1,7 @@
-From 19d9c0b0dacd5d6535e8742eecd2aa02e5c1bac4 Mon Sep 17 00:00:00 2001
+From e17497ed09347d86ed06d0d0446edd1c803e0e59 Mon Sep 17 00:00:00 2001
 From: Christian Dreher <cdreher@prophesee.ai>
 Date: Tue, 14 Jan 2025 19:08:50 +0100
-Subject: [PATCH] Fix types in coresight hwtracing logs
+Subject: [PATCH 4/6] Fix types in coresight hwtracing logs
 
 Signed-off-by: Christian Dreher <cdreher@prophesee.ai>
 ---

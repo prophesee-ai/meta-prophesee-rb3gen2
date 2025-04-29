@@ -1,7 +1,7 @@
-From 7dd7038ce1283bc9597749ccd9e696ed7130cb80 Mon Sep 17 00:00:00 2001
+From f8b60962d228e80e7178ed0a4caca69a0dd716c0 Mon Sep 17 00:00:00 2001
 From: Christian Dreher <cdreher@prophesee.ai>
 Date: Fri, 6 Dec 2024 16:22:24 +0100
-Subject: [PATCH] media: declare V4L2/media bus types for Prophesee sensors
+Subject: [PATCH 2/6] media: declare V4L2/media bus types for Prophesee sensors
 
 Evt2.0 may not be needed long-term, and media bus codes were chosen to
 minimize collision risks with mainline kernel, but should probably be
@@ -16,6 +16,8 @@ a wrong ordering on 32bit words. This happens with IMX636 on
 little-endian hosts (since the MIPI CSI link manages it as 8bit data).
 
 Signed-off-by: Christian Dreher <cdreher@prophesee.ai>
+
+%% original patch: declare-Prophesee-V4L2-media-bus-types.patch
 ---
  drivers/media/v4l2-core/v4l2-ioctl.c  | 4 ++++
  include/uapi/linux/media-bus-format.h | 6 ++++++

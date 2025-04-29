@@ -1,14 +1,14 @@
-From a7784ffbb7e1156cd68f4755442717da417fc9f0 Mon Sep 17 00:00:00 2001
+From f95885c81107ef328d57843689737019818eb981 Mon Sep 17 00:00:00 2001
 From: Christian Dreher <cdreher@prophesee.ai>
 Date: Fri, 6 Dec 2024 15:39:35 +0100
-Subject: [PATCH 94/94] imx636-in-dts
+Subject: [PATCH 6/6] Declare imx636 in dts
 
 ---
- arch/arm64/boot/dts/qcom/qcs6490-rb3gen2.dts | 154 ++++++++++++++-----
- 1 file changed, 119 insertions(+), 35 deletions(-)
+ arch/arm64/boot/dts/qcom/qcs6490-rb3gen2.dts | 155 ++++++++++++++-----
+ 1 file changed, 120 insertions(+), 35 deletions(-)
 
 diff --git a/arch/arm64/boot/dts/qcom/qcs6490-rb3gen2.dts b/arch/arm64/boot/dts/qcom/qcs6490-rb3gen2.dts
-index 05954259a39f..067a611a8115 100644
+index 05954259a39f..751748324922 100644
 --- a/arch/arm64/boot/dts/qcom/qcs6490-rb3gen2.dts
 +++ b/arch/arm64/boot/dts/qcom/qcs6490-rb3gen2.dts
 @@ -196,6 +196,56 @@ active-config0 {
@@ -103,7 +103,7 @@ index 05954259a39f..067a611a8115 100644
  	};
  };
  
-@@ -481,40 +539,66 @@ &cci1 {
+@@ -481,40 +539,67 @@ &cci1 {
  	status = "okay";
  };
  
@@ -175,6 +175,7 @@ index 05954259a39f..067a611a8115 100644
 +	sensor@3c {
 +		compatible = "sony,imx636";
 +		reg = <0x3c>;
++		imx636,fixed-packet-size;
 +
 +		clocks = <&imx636_clk>;
 +
