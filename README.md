@@ -161,7 +161,3 @@ However, recordings done on other platforms, such as public datasets from Prophe
 ### OpenGL support broken in Metavision SDK
 
 While `metavision_viewer` uses CPU rendering, many code samples from Metavision use OpenGL(ES) for rendering. Those are not functional, a rendering thread stops early in the program execution, the reason is yet to be investigated
-
-### Sometimes, Metavision SDK streaming does not start
-
-Sometimes, streaming stops as soon as it starts. More specifically (this may be seen by exporting `MV_LOG_LEVEL=TRACE`), the `poll` on the V4L2 device reports an error. Until now, this was only observed when stopping the streaming, and makes the streaming thread end. Re-starting the application does not reproduce the issue (meaning that the application runs as expected on the second run). Since no such issue was seen with `yavta`, the V4L2 plugin for Metavision SDK is probably to be fixed.
